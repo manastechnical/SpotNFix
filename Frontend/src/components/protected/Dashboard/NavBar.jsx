@@ -48,7 +48,7 @@ function NavBar() {
                 {user.uname}
               </h1>
               <h1 className="text-sm font-bold text-yellow hidden sm:flex">
-                User
+                {user.role}
               </h1>
             </div>
           </div>
