@@ -3,7 +3,7 @@ import { sendOtpEmail } from '../utils/sendOtpEmail.js';
 import { OAuth2Client } from 'google-auth-library';
 const client = new OAuth2Client(process.env.VITE_PUBLIC_GOOGLE_CLIENT);
 
-let GLOBAL_OTP = Math.floor(100000 + Math.random() * 900000).toString();
+let GLOBAL_OTP = '0';
 export const registerUser = async (req, res) => {
     try {
         const { name, email_id, password, mobile, user_type } = req.body;
@@ -52,6 +52,7 @@ export const registerUser = async (req, res) => {
             console.error('Insert error:', insertError);
             throw insertError;
         }
+        GLOBAL_OTP = ""+Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
         await sendOtpEmail(email_id, GLOBAL_OTP);
 
         return res.status(201).json({
@@ -100,7 +101,8 @@ export const validateOtp = async (req, res) => {
         // }
 
         // Validate OTP
-        if (GLOBAL_OTP !== otp) {
+        console.log("💡 GLOBAL_OTP:", GLOBAL_OTP, "Received OTP:", otp);
+        if (GLOBAL_OTP != otp) {
             return res.status(400).json({ message: 'Invalid OTP' });
         }
 
@@ -148,6 +150,7 @@ export const resendOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'User already verified' });
         }
         // Send OTP email
+        GLOBAL_OTP = ""+Math.floor(100000 + Math.random() * 900000); // Generate a new 6-digit OTP
         await sendOtpEmail(user.email, GLOBAL_OTP);
 
         return res.status(200).json({ success: true, message: 'OTP resent successfully' });
