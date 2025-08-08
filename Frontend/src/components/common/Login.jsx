@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
@@ -16,15 +16,25 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
+  const [userType, setUserType] = useState('');
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
+  useEffect(() => {
+    setEmail('');
+    setPassword('');
+    setName('');
+    setMobile('');
+    setUserType('');
+  }, [isLoginView]);
+
   const handleSubmit = (e) => {
+    console.log('Form submitted',email, password, name, mobile, userType);
     e.preventDefault();
     if (isLoginView) {
-      dispatch(login(email, password, navigate));
+      dispatch(login(email, userType, password, navigate));
     } else {
-      dispatch(register(name, email, password, mobile, navigate));
+      dispatch(register(name, email, password, mobile,userType, navigate));
     }
   };
 
@@ -85,7 +95,26 @@ const Login = () => {
                   required
                 />
               </div>
-
+              <div>
+                <label
+                  htmlFor="userType"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  User Type
+                </label>
+                <select
+                  id="userType"
+                  value={userType}
+                  onChange={(e) => setUserType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  required
+                >
+                  <option value="">Select user type</option>
+                  <option value="citizen">Citizen</option>
+                  <option value="contractor">Contractor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
               <div>
                 <label
                   htmlFor="password"
@@ -202,7 +231,26 @@ const Login = () => {
                   required
                 />
               </div>
-
+              <div>
+                <label
+                  htmlFor="userType"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  User Type
+                </label>
+                <select
+                  id="userType"
+                  value={userType}
+                  onChange={(e) => setUserType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  required
+                >
+                  <option value="">Select user type</option>
+                  <option value="citizen">Citizen</option>
+                  <option value="contractor">Contractor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
               <div>
                 <label
                   htmlFor="mobile"

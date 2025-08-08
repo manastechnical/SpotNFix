@@ -10,13 +10,13 @@ import {
 } from '../../app/DashboardSlice';
 import { authEndpoints } from '../Apis';
 const { LOGIN_API, REGISTER, VALIDATE_GMAIL, GOOGLE_SIGN_IN } = authEndpoints;
-
-export function login(email_id, password, navigate) {
+export function login(email_id,role,password, navigate) {
   return async (dispatch) => {
     const loadingToast = toast.loading('Letting you in...');
     try {
       const response = await apiConnector('POST', LOGIN_API, {
         email_id,
+        role,
         password,
       });
 
@@ -27,11 +27,12 @@ export function login(email_id, password, navigate) {
           id: response.data.data.u_id,
           uname: response.data.data.name,
           uemail: response.data.data.email,
-          token: response.data.data.token,
-          role_id: response.data.data.role_id,
+          // token: response.data.data.token,
+          // role_id: response.data.data.role_id,
           role: response.data.data.role,
           is_new: response.data.data.isNew,
         };
+        console.log("temp",temp);
         dispatch(setAccount(temp));
         if (response.data.data.isNew) {
           dispatch(
@@ -64,6 +65,7 @@ export function login(email_id, password, navigate) {
 export function authEmail(userId, otp, navigate) {
   return async (dispatch) => {
     const toastId = toast.loading('Validating OTP..');
+    console.log('Validating OTP with data:', { userId, otp });
     try {
       const response = await apiConnector('POST', VALIDATE_GMAIL, {
         userId,
@@ -87,15 +89,17 @@ export function authEmail(userId, otp, navigate) {
   };
 }
 
-export function register(name, email_id, password, mobile, navigate) {
+export function register(name, email_id, password, mobile, user_type, navigate) {
   return async (dispatch) => {
     const loadingToast = toast.loading('Registering you...');
+    console.log('Registering user with data:', { name, email_id, password, mobile, user_type });
     try {
       const response = await apiConnector('POST', REGISTER, {
         name,
         email_id,
         mobile,
         password,
+        user_type,
       });
       console.log('Register API response : ', response.data.data);
       if (response.data.success) {
@@ -109,6 +113,9 @@ export function register(name, email_id, password, mobile, navigate) {
         dispatch(setAccountAfterRegister(temp));
         navigate('/verify-email');
       } else {
+        if(response.status === 409) {
+          toast.error('User already exists. Please login.');
+        } else 
         throw new Error(response.data.message);
       }
     } catch (error) {
@@ -133,11 +140,12 @@ export function loginWithGoogle(credentialResponse, navigate) {
         toast.success('Google Sign-In Successful!');
 
         const temp = {
-          id: response.data.data.data.u_id,
-          uname: response.data.data.data.name,
-          uemail: response.data.data.data.email,
-          token: response.data.data.data.token,
-          is_new: response.data.data.data.isNew,
+          id: response.data.data.u_id,
+          uname: response.data.data.name,
+          uemail: response.data.data.email,
+          // token: response.data.data.data.token,
+          is_new: response.data.data.isNew,
+          role: response.data.data.role,
         };
         console.log(temp);
 

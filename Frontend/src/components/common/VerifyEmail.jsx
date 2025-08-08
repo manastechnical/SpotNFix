@@ -6,6 +6,8 @@ import { selectAccount } from '../../app/DashboardSlice';
 import { authEmail } from '../../services/repository/userRepo';
 import { useDispatch, useSelector } from 'react-redux';
 import { ArrowLeft, Timer } from 'lucide-react';
+import toast from 'react-hot-toast';
+import axios from 'axios';
 
 const VerifyEmail = () => {
   let [otp, setOtp] = useState('');
@@ -17,6 +19,23 @@ const VerifyEmail = () => {
     e.preventDefault();
     dispatch(authEmail(acc.id, otp, navigate));
   };
+  const handleResendOtp = async () => {
+
+    try {
+      console.log('Resending OTP for user:', acc.id);
+      const response = await axios.get(`http://localhost:8000/auth/resend-otp?userId=${acc.id}`);
+      console.log('OTP resent successfully:', response.data.message);
+      toast('OTP has been resent to your email.');
+    } catch (error) {
+      if (error.response) {
+        console.error('Error resending OTP:', error.response.data.message);
+        toast(`Failed to resend OTP: ${error.response.data.message}`);
+      } else {
+        console.error('Network error while resending OTP:', error.message);
+        toast('Network error. Please try again.');
+      }
+    }
+  };
   return (
     <>
       <div className="relative min-h-screen flex items-center justify-center">
@@ -27,7 +46,7 @@ const VerifyEmail = () => {
           muted
           className="absolute w-full h-full object-cover"
         >
-          <source src={''} type="video/mp4" />
+          {/* <source src={''} type="video/mp4" /> */}
         </video>
 
         {/* Overlay */}
@@ -99,9 +118,7 @@ const VerifyEmail = () => {
 
               <button
                 className="flex items-center gap-2 text-green-400 hover:text-green-300 transition-colors"
-                onClick={() => {
-                  // Handle resend logic
-                }}
+                onClick={handleResendOtp}
               >
                 <Timer className="w-4 h-4" />
                 Resend Code
