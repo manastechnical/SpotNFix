@@ -70,7 +70,7 @@ import { useState, useEffect } from 'react';
                     Welcome to <span className="bg-gradient-to-r from-blue-600 to-teal-500 text-transparent bg-clip-text">Your New Project</span>
                     </h1>
                     <p className="text-lg md:text-xl text-gray-600 mb-8">
-                    This beautiful landing page was generated with quikfrontend. Customize it to build something amazing.
+                    This beautiful landing page was generated with MAPJ. Customize it to build something amazing.
                     </p>
                     <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
                     <Button onClick={()=> {navigate("/login")}} className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-all transform hover:scale-105 flex items-center justify-center">

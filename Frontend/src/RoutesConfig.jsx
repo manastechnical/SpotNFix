@@ -8,6 +8,7 @@ import { isUserLoggedIn } from './app/DashboardSlice';
 import NavBar from './components/protected/Dashboard/NavBar';
 import Sidebar from './components/utils/Sidebar';
 import Dashboard from './components/protected/Dashboard/Dashboard';
+import ReportPothole from './components/protected/ReportPothole';
 
 const RoutesConfig = () => {
   const isLoggedIn = useSelector(isUserLoggedIn);
@@ -44,18 +45,8 @@ const RoutesConfig = () => {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/pd" element={<ReportPothole />} />
           </Routes>
-          <div className="bg-gray-900 b-2 pr-2 text-sm pb-1 flex justify-end items-center">
-            <p className="text-white">
-              Designed and Developed with ❤️ by{' '}
-              <a
-                href="https://hareshkurade.netlify.app"
-                className="text-green-400"
-              >
-                quikfrontend
-              </a>
-            </p>
-          </div>
         </div>
       </div>
     );
