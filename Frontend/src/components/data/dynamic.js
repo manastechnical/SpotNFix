@@ -7,6 +7,12 @@ const features = [
     logoUsed: HomeIcon,
     route: '/dashboard',
   },
+  {
+    featureName: 'pd',
+    displayName: 'Pothole Detection',
+    logoUsed: HomeIcon,
+    route: '/pd',
+  },
 ];
 
 export { features };

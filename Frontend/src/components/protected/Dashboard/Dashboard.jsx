@@ -6,7 +6,7 @@ const Dashboard = () => {
       <div className="w-full max-w-6xl h-full flex flex-col">
         <header className="mb-4">
           <h1 className="text-3xl font-bold text-green-500">
-            Welcome to quikfrontend Dashboard...!
+            Welcome to SpotNFix Dashboard...!
           </h1>
         </header>
       </div>
