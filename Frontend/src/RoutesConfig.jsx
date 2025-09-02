@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { HeroPage, Login, VerifyEmail } from './components';
 import { dashboardMenuState } from './app/DashboardSlice';
@@ -9,10 +9,14 @@ import NavBar from './components/protected/Dashboard/NavBar';
 import Sidebar from './components/utils/Sidebar';
 import Dashboard from './components/protected/Dashboard/Dashboard';
 import ReportPothole from './components/protected/ReportPothole';
+import PotholeMap from './components/protected/PotholeMap';
 
 const RoutesConfig = () => {
   const isLoggedIn = useSelector(isUserLoggedIn);
   const ifDMenuState = useSelector(dashboardMenuState);
+  const location = useLocation();
+  const isMapView = location.pathname === '/map-view';
+
   if (!isLoggedIn) {
     return (
       <Routes>
@@ -37,15 +41,16 @@ const RoutesConfig = () => {
   } else {
     return (
       <div
-        className={`w-full h-[100vh] bg-[#121212] flex flex-col overflow-y-auto scrollbar-hide`}
+        className={`w-full h-screen bg-[#121212] flex flex-col`}
       >
         <Sidebar isOpen={ifDMenuState} />
         <NavBar />
-        <div className={`${ifDMenuState && 'pl-[4rem]'} `}>
+        <div className={`flex-grow ${isMapView ? 'relative' : 'overflow-y-auto'} ${ifDMenuState ? 'pl-16' : ''}`}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/pd" element={<ReportPothole />} />
+            <Route path="/map-view" element={<PotholeMap />} />
           </Routes>
         </div>
       </div>

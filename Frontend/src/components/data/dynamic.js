@@ -13,6 +13,12 @@ const features = [
     logoUsed: HomeIcon,
     route: '/pd',
   },
+  {
+    featureName: 'map-view',
+    displayName: 'Live Map',
+    logoUsed: HomeIcon,
+    route: '/map-view',
+  },
 ];
 
 export { features };

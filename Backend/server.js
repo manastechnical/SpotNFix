@@ -1,14 +1,30 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import authRoutes from "./routes/authRoutes.js";
+// Backend/server.js
+import express from 'express';
+import dotenv from 'dotenv';
+import cors from 'cors';
+
+// Import your routes
+import authRoutes from './routes/authRoutes.js';
+import contractorRoutes from './routes/contractorRoutes.js';
+import govRoutes from './routes/govRoutes.js';
+import publicRoutes from './routes/publicRoutes.js';
+import potholeRoutes from './routes/potholeRoutes.js';
+
 dotenv.config();
+
 const app = express();
+const PORT = process.env.PORT || 8000;
 
 app.use(cors());
 app.use(express.json());
 
-app.use("/auth",authRoutes);
+// Use your routes
+app.use('/api/auth', authRoutes);
+app.use('/api/contractor', contractorRoutes);
+app.use('/api/gov', govRoutes);
+app.use('/api/public', publicRoutes);
+app.use('/api/potholes', potholeRoutes); 
 
-const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
