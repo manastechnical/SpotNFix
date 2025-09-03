@@ -28,12 +28,20 @@ export const checkNearbyPotholes = async (req, res) => {
 // --- NEW: Function to handle the actual pothole reporting ---
 export const reportPothole = async (req, res) => {
     // Data from the form (already verified by middleware)
-    const { lat, lng, description, severity, user_id } = req.body; // user_id is optional
+    const { lat, lng, description, severity, user_id } = req.body;
     const imageFile = req.file;
+
+    // Validate required fields including user_id
+    if (!lat || !lng || !description || !severity || !user_id) {
+        return res.status(400).json({ 
+            error: 'Missing required fields. All fields including user_id are mandatory.',
+            required: ['lat', 'lng', 'description', 'severity', 'user_id']
+        });
+    }
 
     try {
         // --- 1. Upload Image to Supabase Storage ---
-        const fileName = `${user_id || 'anonymous'}/${uuidv4()}-${imageFile.originalname}`;
+        const fileName = `${user_id}/${uuidv4()}-${imageFile.originalname}`;
         const { data: uploadData, error: uploadError } = await supabase.storage
             .from('pothole-images') // Make sure you have a bucket named 'pothole-images'
             .upload(fileName, imageFile.buffer, {
@@ -53,22 +61,19 @@ export const reportPothole = async (req, res) => {
 
 
         // --- 2. Save Pothole Details to the Database ---
-        // Build insert payload and only include user_id if provided
-        const potholeInsert = {
-            latitude: parseFloat(lat),
-            longitude: parseFloat(lng),
-            description: description,
-            severity: severity,
-            status: 'reported',
-        };
-
-        if (user_id) {
-            potholeInsert.user_id = user_id;
-        }
-
         const { data: potholeData, error: potholeError } = await supabase
             .from('potholes')
-            .insert([potholeInsert])
+            .insert([
+                {
+                    user_id: user_id, // Required: logged-in user's ID
+                    latitude: parseFloat(lat),
+                    longitude: parseFloat(lng),
+                    description: description,
+                    severity: severity,
+                    status: 'reported', // Default status
+                    // We'll add the image URL to the images table next
+                },
+            ])
             .select() // Use .select() to get the newly created pothole record back
             .single(); // We expect only one record back
 
@@ -77,39 +82,18 @@ export const reportPothole = async (req, res) => {
         }
         
         // --- 3. Link Image to the Pothole in the 'images' table ---
-        // Determine image type with robust fallback attempts
-        const candidateTypes = [
-            process.env.IMAGE_DEFAULT_TYPE,
-            'original',
-            'before',
-            'after',
-        ].filter(Boolean);
-
-        let imageError = null;
-        for (const candidate of candidateTypes) {
-            const { error: attemptError } = await supabase
-                .from('images')
-                .insert([
-                    {
-                        pothole_id: potholeData.id,
-                        image_url: publicUrl,
-                        type: candidate,
-                    }
-                ]);
-            if (!attemptError) {
-                imageError = null;
-                break;
-            }
-            imageError = attemptError;
-            // If enum mismatch or not-null, try next candidate; otherwise break
-            if (attemptError?.code !== '22P02' && attemptError?.code !== '23502') {
-                break;
-            }
-        }
+        const { error: imageError } = await supabase
+            .from('images')
+            .insert([
+                {
+                    pothole_id: potholeData.id,
+                    image_url: publicUrl,
+                    type: 'before_repair', // Example type
+                }
+            ]);
 
         if (imageError) {
-            const tried = candidateTypes.join(', ');
-            throw new Error(`Failed to insert image with any allowed type. Tried: ${tried}. Ensure your images.type enum contains one of these or set IMAGE_DEFAULT_TYPE to a valid value.`);
+            throw imageError;
         }
 
 
@@ -117,19 +101,7 @@ export const reportPothole = async (req, res) => {
 
     } catch (error) {
         console.error("Error reporting pothole:", error);
-        // Provide clearer guidance for common enum/nullable issues
-        if (error?.code === '22P02') {
-            return res.status(400).json({
-                error: 'Invalid image type value. Set IMAGE_DEFAULT_TYPE in Backend/.env to a valid enum option for images.type.'
-            });
-        }
-        if (error?.code === '23502') {
-            return res.status(500).json({
-                error: 'images.type is required by the database. Set IMAGE_DEFAULT_TYPE in Backend/.env to a valid enum option.'
-            });
-        }
-        const errorMessage = error?.message || 'Failed to report pothole.';
-        res.status(500).json({ error: errorMessage });
+        res.status(500).json({ error: 'Failed to report pothole.' });
     }
 };
 

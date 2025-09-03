@@ -8,6 +8,7 @@ import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { FiAlertTriangle } from 'react-icons/fi';
 import { FaLocationArrow } from "react-icons/fa";
+import { useSelector } from 'react-redux';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -65,6 +66,10 @@ const ReportPothole = () => {
     const [isDetecting, setIsDetecting] = useState(false);
     const [detectionResult, setDetectionResult] = useState(null);
     const [hasPothole, setHasPothole] = useState(false);
+
+    // Get user ID from Redux state
+    const { account } = useSelector((state) => state.dashboard);
+    const userId = account?.id;
 
     // --- NEW: Improved handleRecenter function ---
     const handleRecenter = () => {
@@ -295,6 +300,10 @@ const ReportPothole = () => {
             toast.error("Please upload an image!");
             return;
         }
+        if (!userId) {
+            toast.error("You must be logged in to report a pothole!");
+            return;
+        }
         setIsSubmitting(true);
         setUploadProgress(0);
         const formData = new FormData();
@@ -302,6 +311,7 @@ const ReportPothole = () => {
         formData.append("lat", lat);
         formData.append("lng", lng);
         formData.append("severity", severity);
+        formData.append("user_id", userId);
         formData.append("media", mediaFiles[0]);
         try {
             await axios.post("/api/potholes/report", formData, {
