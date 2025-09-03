@@ -1,7 +1,7 @@
 import supabase from '../supabaseClient.js';
 import { sendOtpEmail } from '../utils/sendOtpEmail.js';
 import { OAuth2Client } from 'google-auth-library';
-const client = new OAuth2Client(process.env.VITE_PUBLIC_GOOGLE_CLIENT);
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 let GLOBAL_OTP = '0';
 export const registerUser = async (req, res) => {
