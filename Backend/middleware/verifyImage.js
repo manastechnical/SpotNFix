@@ -41,20 +41,13 @@ export const verifyImage = (req, res, next) => {
             return res.status(400).json({ error: "Image location does not match the reported location." });
         }
 
-        // --- 2. Timestamp Check ---
-        // DateTimeOriginal is the time the photo was taken, in seconds since epoch.
-        const photoTimestamp = exifData.tags.DateTimeOriginal * 1000; 
-        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-
-        if (!photoTimestamp || photoTimestamp < fiveMinutesAgo) {
-            return res.status(400).json({ error: "Image is too old. Please submit a photo taken within the last 5 minutes." });
-        }
+        // Timestamp freshness check removed as requested
 
         // If all checks pass, move to the next function in the chain
         next();
 
     } catch (error) {
         console.error("EXIF Parsing Error:", error);
-        return res.status(400).json({ error: "Could not verify image. It may not be a genuine camera photo or may lack metadata." });
-    }
+        return res.status(400).json({ error: "Could not verify image. It may not be a genuine camera photo or may lack metadata." });
+    }
 };

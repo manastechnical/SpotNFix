@@ -3,8 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const checkNearbyPotholes = async (req, res) => {
     const { lat, lng, radius } = req.query;
-        const searchRadius = radius || 50;
-
+    const searchRadius = radius || 50;
 
     if (!lat || !lng) {
         return res.status(400).json({ error: 'Latitude and longitude are required.' });
@@ -16,22 +15,70 @@ export const checkNearbyPotholes = async (req, res) => {
             lng_input: parseFloat(lng),
             radius_meters: parseFloat(searchRadius)
         });
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
 
         res.status(200).json(data);
     } catch (error) {
-        console.error('Error checking for nearby potholes:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('RPC failed for nearby potholes, attempting fallback:', error);
+
+        // Fallback: Bounding box + haversine filter in JS
+        try {
+            const centerLat = parseFloat(lat);
+            const centerLng = parseFloat(lng);
+            const radiusMeters = parseFloat(searchRadius);
+
+            // Approximate bounding box in degrees
+            const metersPerDegreeLat = 111_320; 
+            const metersPerDegreeLng = 111_320 * Math.cos(centerLat * Math.PI / 180);
+            const dLat = radiusMeters / metersPerDegreeLat;
+            const dLng = radiusMeters / metersPerDegreeLng;
+
+            const minLat = centerLat - dLat;
+            const maxLat = centerLat + dLat;
+            const minLng = centerLng - dLng;
+            const maxLng = centerLng + dLng;
+
+            const { data: boxData, error: boxError } = await supabase
+                .from('potholes')
+                .select('id, latitude, longitude, description, severity, status')
+                .gte('latitude', minLat)
+                .lte('latitude', maxLat)
+                .gte('longitude', minLng)
+                .lte('longitude', maxLng);
+
+            if (boxError) {
+                throw boxError;
+            }
+
+            const toRad = (deg) => deg * Math.PI / 180;
+            const earthRadiusM = 6_371_000;
+            const filtered = (boxData || []).filter((p) => {
+                if (p.latitude == null || p.longitude == null) return false;
+                const dLatRad = toRad(p.latitude - centerLat);
+                const dLngRad = toRad(p.longitude - centerLng);
+                const a = Math.sin(dLatRad / 2) ** 2 +
+                          Math.cos(toRad(centerLat)) * Math.cos(toRad(p.latitude)) *
+                          Math.sin(dLngRad / 2) ** 2;
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                const distance = earthRadiusM * c;
+                return distance <= radiusMeters;
+            });
+
+            return res.status(200).json(filtered);
+        } catch (fallbackError) {
+            console.error('Fallback failed for nearby potholes:', fallbackError);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
     }
 };
 
 // --- NEW: Function to handle the actual pothole reporting ---
 export const reportPothole = async (req, res) => {
-    // Data from the form (already verified by middleware)
     const { lat, lng, description, severity, user_id } = req.body;
     const imageFile = req.file;
 
-    // Validate required fields including user_id
     if (!lat || !lng || !description || !severity || !user_id) {
         return res.status(400).json({ 
             error: 'Missing required fields. All fields including user_id are mandatory.',
@@ -43,7 +90,7 @@ export const reportPothole = async (req, res) => {
         // --- 1. Upload Image to Supabase Storage ---
         const fileName = `${user_id}/${uuidv4()}-${imageFile.originalname}`;
         const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('pothole-images') // Make sure you have a bucket named 'pothole-images'
+            .from('pothole-images')
             .upload(fileName, imageFile.buffer, {
                 contentType: imageFile.mimetype,
                 cacheControl: '3600',
@@ -59,23 +106,21 @@ export const reportPothole = async (req, res) => {
             .from('pothole-images')
             .getPublicUrl(fileName);
 
-
         // --- 2. Save Pothole Details to the Database ---
         const { data: potholeData, error: potholeError } = await supabase
             .from('potholes')
             .insert([
                 {
-                    user_id: user_id, // Required: logged-in user's ID
+                    user_id: user_id,
                     latitude: parseFloat(lat),
                     longitude: parseFloat(lng),
                     description: description,
                     severity: severity,
-                    status: 'reported', // Default status
-                    // We'll add the image URL to the images table next
+                    status: 'reported',
                 },
             ])
-            .select() // Use .select() to get the newly created pothole record back
-            .single(); // We expect only one record back
+            .select()
+            .single();
 
         if (potholeError) {
             throw potholeError;
@@ -88,14 +133,13 @@ export const reportPothole = async (req, res) => {
                 {
                     pothole_id: potholeData.id,
                     image_url: publicUrl,
-                    type: 'before_repair', // Example type
+                    type: 'before_repair',
                 }
             ]);
 
         if (imageError) {
             throw imageError;
         }
-
 
         res.status(201).json({ message: "Pothole reported successfully!", data: potholeData });
 
