@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   dashboardFeature,
@@ -6,7 +6,7 @@ import {
   setCloseDMenu,
   setDFeature,
 } from '../../app/DashboardSlice.js';
-import { features } from '../data/dynamic.js';
+import { getFeatures } from '../data/dynamic.js';
 import { useNavigate } from 'react-router-dom';
 
 import { Feather, X } from 'lucide-react';
@@ -17,7 +17,19 @@ const Sidebar = ({ isOpen }) => {
   const [isHovered, setIsHovered] = useState(false);
   const ifDMenuState = useSelector(dashboardMenuState);
   const dashboardFeatures = useSelector(dashboardFeature);
+  const [sidebarFeatures, setSidebarFeatures] = useState([]);
 
+  useEffect(() => {
+    setSidebarFeatures(getFeatures());
+    
+    // Listen for changes in localStorage
+    const handleStorageChange = () => {
+      setSidebarFeatures(getFeatures());
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
   const onCartToggler = () => {
     dispatch(setCloseDMenu({ dashboardMenuState: !ifDMenuState }));
   };
@@ -54,7 +66,7 @@ const Sidebar = ({ isOpen }) => {
         </p>
       </div>
       <div className="flex flex-col gap-2 px-2">
-        {features.map((item, index) => (
+        {sidebarFeatures.map((item, index) => (
           <div
             key={index}
             className={`flex items-center cursor-pointer rounded-xl transition-all duration-200

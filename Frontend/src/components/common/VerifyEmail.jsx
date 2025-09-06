@@ -23,7 +23,7 @@ const VerifyEmail = () => {
 
     try {
       console.log('Resending OTP for user:', acc.id);
-      const response = await axios.get(`http://localhost:8000/auth/resend-otp?userId=${acc.id}`);
+      const response = await axios.get(`http://localhost:8000/api/auth/resend-otp?userId=${acc.id}`);
       console.log('OTP resent successfully:', response.data.message);
       toast('OTP has been resent to your email.');
     } catch (error) {

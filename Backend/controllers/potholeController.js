@@ -160,14 +160,38 @@ export const getAllPotholes = async (req, res) => {
                 description,
                 severity,
                 status,
-                images ( image_url )
-            `);
+                bids (
+                    id,
+                    amount,
+                    description,
+                    status,
+                    contractor_id,
+                    users (
+                        name,
+                        email
+                    )
+                )
+            `)
+            .order('id'); // Changed from ordering by bids.created_at
 
         if (error) throw error;
 
-        res.status(200).json(data);
+        // Transform the data to include the current (lowest) bid
+        const transformedData = data.map(pothole => ({
+            ...pothole,
+            current_bid: pothole.bids && pothole.bids.length > 0 
+                ? pothole.bids.reduce((lowest, current) => 
+                    current.amount < lowest.amount ? current : lowest
+                  , pothole.bids[0])
+                : null
+        }));
+
+        res.status(200).json(transformedData);
     } catch (error) {
         console.error("Error fetching all potholes:", error);
-        res.status(500).json({ error: 'Failed to fetch potholes.' });
+        res.status(500).json({ 
+            error: 'Failed to fetch potholes.',
+            details: error.message 
+        });
     }
 };
