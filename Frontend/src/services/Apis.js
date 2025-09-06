@@ -11,3 +11,7 @@ export const authEndpoints = {
 export const uploadEndPoints = {
   UPLOAD: BaseURL + 'api/upload/',
 };
+
+export const bidEndpoints = {
+  SUBMIT_BID: BaseURL + 'api/bids/submit',
+};

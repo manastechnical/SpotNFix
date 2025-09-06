@@ -18,7 +18,7 @@ export default defineConfig({
                 secure: false,
             },
             '/ml': {
-                target: 'http://localhost:8001',
+                target: 'http://localhost:5000',
                 changeOrigin: true,
                 secure: false,
                 rewrite: (path) => path.replace(/^\/ml\//, '/'),

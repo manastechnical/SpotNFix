@@ -10,6 +10,7 @@ import Sidebar from './components/utils/Sidebar';
 import Dashboard from './components/protected/Dashboard/Dashboard';
 import ReportPothole from './components/protected/ReportPothole';
 import PotholeMap from './components/protected/PotholeMap';
+import ContractorBidding from './components/protected/ContractorBidding';
 
 const RoutesConfig = () => {
   const isLoggedIn = useSelector(isUserLoggedIn);
@@ -51,6 +52,7 @@ const RoutesConfig = () => {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/pd" element={<ReportPothole />} />
             <Route path="/map-view" element={<PotholeMap />} />
+            <Route path="/contractor-bidding" element={<ContractorBidding />} />
           </Routes>
         </div>
       </div>

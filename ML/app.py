@@ -22,6 +22,7 @@ def health_check():
 
 @app.route("/detect", methods=["POST"]) 
 def detect():
+    print("Received request for /detect")
     if "file" not in request.files:
         return jsonify({"error": "No file part in the request. Use form-data with key 'file'."}), 400
 
@@ -71,10 +72,9 @@ def detect():
     except Exception as exc:  # noqa: BLE001
         return jsonify({"error": f"Inference error: {exc}"}), 500
 
-
 if __name__ == "__main__":
     # Host 0.0.0.0 allows access from other devices (useful during development)
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
 
 
