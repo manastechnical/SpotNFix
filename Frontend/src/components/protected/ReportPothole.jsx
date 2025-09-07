@@ -8,6 +8,7 @@ import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { FiAlertTriangle } from 'react-icons/fi';
 import { FaLocationArrow } from "react-icons/fa";
+import { useSelector } from 'react-redux';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -39,7 +40,6 @@ const createGeoJSONCircle = (center, radiusInMeters, points = 64) => {
 };
 
 const ReportPothole = () => {
-    // ... (All state and refs are unchanged)
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const markerRef = useRef(null);
@@ -63,6 +63,13 @@ const ReportPothole = () => {
     const [nearbyPotholes, setNearbyPotholes] = useState([]);
     const [isChecking, setIsChecking] = useState(false);
     const [showDuplicates, setShowDuplicates] = useState(false);
+    const [isDetecting, setIsDetecting] = useState(false);
+    const [detectionResult, setDetectionResult] = useState(null);
+    const [hasPothole, setHasPothole] = useState(false);
+
+    // Get user ID from Redux state
+    const { account } = useSelector((state) => state.dashboard);
+    const userId = account?.id;
 
     // --- NEW: Improved handleRecenter function ---
     const handleRecenter = () => {
@@ -118,7 +125,6 @@ const ReportPothole = () => {
         );
     };
 
-    // ... (The rest of your functions, useEffects, and JSX are completely unchanged)
     const updateLocationDetails = useCallback((currentLat, currentLng) => {
         setIsChecking(true);
         setIsGeocoding(true);
@@ -225,17 +231,66 @@ const ReportPothole = () => {
                 const reader = new FileReader();
                 reader.addEventListener('load', () => setImgSrc(reader.result.toString() || ''));
                 reader.readAsDataURL(acceptedFiles[0]);
-                analyzeImageSeverity(acceptedFiles[0]);
+                detectPotholeInImage(acceptedFiles[0]);
             }
         }
     });
 
-    const analyzeImageSeverity = async (file) => {
+    const detectPotholeInImage = async (file) => {
+        setIsDetecting(true);
+        setDetectionResult(null);
+        setHasPothole(false);
+        setSeverity(null);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch('http://127.0.0.1:5000/detect', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error(`Detection failed: ${response.status}`);
+            }
+
+            const result = await response.json();
+            setDetectionResult(result);
+
+            if (result.num_detections > 0) {
+                setHasPothole(true);
+                // Analyze severity based on detection confidence
+                analyzeImageSeverity(result.detections[0].confidence);
+                toast.success(`Pothole detected! Found ${result.num_detections} pothole(s)`);
+            } else {
+                setHasPothole(false);
+                toast.error("No pothole detected in the image. Please upload a clear image of a pothole.");
+            }
+        } catch (error) {
+            console.error('ML Detection error:', error);
+            setHasPothole(false);
+            toast.error("Failed to analyze image. Please try again.");
+        } finally {
+            setIsDetecting(false);
+        }
+    };
+
+    const analyzeImageSeverity = async (confidence) => {
         setIsAnalyzing(true);
         setSeverity(null);
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const randomSeverity = ['Low', 'Medium', 'High'][Math.floor(Math.random() * 3)];
-        setSeverity(randomSeverity);
+
+        // Determine severity based on confidence score
+        let severity;
+        if (confidence >= 0.8) {
+            severity = 'High';
+        } else if (confidence >= 0.6) {
+            severity = 'Medium';
+        } else {
+            severity = 'Low';
+        }
+
+        setSeverity(severity);
         setIsAnalyzing(false);
     };
 
@@ -245,6 +300,10 @@ const ReportPothole = () => {
             toast.error("Please upload an image!");
             return;
         }
+        if (!userId) {
+            toast.error("You must be logged in to report a pothole!");
+            return;
+        }
         setIsSubmitting(true);
         setUploadProgress(0);
         const formData = new FormData();
@@ -252,6 +311,7 @@ const ReportPothole = () => {
         formData.append("lat", lat);
         formData.append("lng", lng);
         formData.append("severity", severity);
+        formData.append("user_id", userId);
         formData.append("media", mediaFiles[0]);
         try {
             await axios.post("/api/potholes/report", formData, {
@@ -268,6 +328,8 @@ const ReportPothole = () => {
             setSeverity(null);
             setNearbyPotholes([]);
             setShowDuplicates(false);
+            setDetectionResult(null);
+            setHasPothole(false);
             setStep(1);
         } catch (err) {
             console.error(err); // Keep this for debugging
@@ -344,13 +406,93 @@ const ReportPothole = () => {
                             {imgSrc && (
                                 <div className="mt-4">
                                     <ReactCrop crop={crop} onChange={c => setCrop(c)}>
-                                        <img src={imgSrc} alt="Pothole Preview" style={{ maxHeight: '200px' }}/>
+                                        <img src={imgSrc} alt="Pothole Preview" style={{ maxHeight: '200px' }} />
                                     </ReactCrop>
                                 </div>
                             )}
+
+                            {/* Detection Status */}
+                            <div className="mt-4">
+                                {isDetecting && (
+                                    <div className="flex items-center justify-center p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+                                        <span className="text-blue-700">Analyzing image for potholes...</span>
+                                    </div>
+                                )}
+
+                                {!isDetecting && detectionResult && (
+                                    <div className={`p-3 rounded-lg border ${hasPothole
+                                            ? 'bg-green-50 border-green-200 text-green-700'
+                                            : 'bg-red-50 border-red-200 text-red-700'
+                                        }`}>
+                                        <div className="flex items-center">
+                                            {hasPothole ? (
+                                                <>
+                                                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                    </svg>
+                                                    <span className="font-semibold">
+                                                        Pothole Detected! ({detectionResult.num_detections} found)
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1h-1z" clipRule="evenodd" />
+                                                    </svg>
+                                                    <span className="font-semibold">
+                                                        No Pothole Detected
+                                                    </span>
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {hasPothole && detectionResult.detections && (
+                                            <div className="mt-2 text-sm">
+                                                <p>Confidence: {(detectionResult.detections[0].confidence * 100).toFixed(1)}%</p>
+                                                <p>Class: {detectionResult.detections[0].class_name}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {!isDetecting && !hasPothole && mediaFiles.length > 0 && (
+                                    <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center">
+                                                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v4a1 1 0 001 1h1a1 1 0 001-1V6a1 1 0 00-1-1h-1z" clipRule="evenodd" />
+                                                </svg>
+                                                <span className="font-semibold">Please upload a clear image of a pothole</span>
+                                            </div>
+                                            <button
+                                                onClick={() => detectPotholeInImage(mediaFiles[0])}
+                                                className="ml-2 px-3 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 rounded-full hover:bg-yellow-200 transition-colors"
+                                            >
+                                                Retry Detection
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Guidance Message */}
+                            {mediaFiles.length > 0 && !hasPothole && (
+                                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                    <div className="flex items-center text-red-700">
+                                        <svg className="w-5 h-5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1h-1z" clipRule="evenodd" />
+                                        </svg>
+                                        <span className="text-sm">
+                                            <strong>Cannot proceed:</strong> No pothole detected in the uploaded image. Please upload a clear image showing a pothole.
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
                             <button
                                 onClick={() => setStep(2)}
-                                disabled={mediaFiles.length === 0}
+                                disabled={mediaFiles.length === 0 || !hasPothole}
                                 className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg w-full font-semibold hover:bg-blue-700 transition disabled:bg-gray-400"
                             >
                                 Next
@@ -369,45 +511,44 @@ const ReportPothole = () => {
                             <div>
                                 <label className="block text-sm font-medium">Description</label>
                                 <textarea
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className="w-full p-2 border rounded-md mt-1"
-                                rows="2"
-                                placeholder="e.g., Deep pothole on the right lane."
-                                required
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    className="w-full p-2 border rounded-md mt-1"
+                                    rows="2"
+                                    placeholder="e.g., Deep pothole on the right lane."
+                                    required
                                 ></textarea>
                             </div>
                             <div className="mt-4">
                                 <label className="block text-sm font-medium">Detected Severity</label>
                                 {isAnalyzing && <p className="text-sm text-gray-500">Analyzing image...</p>}
                                 {severity && (
-                                <div className={`text-sm font-bold p-2 rounded-md inline-block ${
-                                    severity === 'High' ? 'bg-red-100 text-red-800' :
-                                    severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-green-100 text-green-800'
-                                }`}>
-                                    {severity}
-                                </div>
+                                    <div className={`text-sm font-bold p-2 rounded-md inline-block ${severity === 'High' ? 'bg-red-100 text-red-800' :
+                                        severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                            'bg-green-100 text-green-800'
+                                        }`}>
+                                        {severity}
+                                    </div>
                                 )}
                             </div>
                             {isSubmitting && (
                                 <div className="mt-4 w-full bg-gray-200 rounded-full">
-                                <div className="bg-blue-600 text-xs font-medium text-blue-100 text-center p-0.5 leading-none rounded-full" style={{ width: `${uploadProgress}%` }}>
-                                    {uploadProgress}%
-                                </div>
+                                    <div className="bg-blue-600 text-xs font-medium text-blue-100 text-center p-0.5 leading-none rounded-full" style={{ width: `${uploadProgress}%` }}>
+                                        {uploadProgress}%
+                                    </div>
                                 </div>
                             )}
                             <div className="flex justify-between mt-6 space-x-4">
                                 <button type="button" onClick={() => setStep(1)} className="bg-gray-300 px-6 py-2 rounded-lg font-semibold w-1/2">Back</button>
                                 <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold w-1/2 disabled:bg-gray-400">
-                                {isSubmitting ? 'Submitting...' : 'Submit Report'}
+                                    {isSubmitting ? 'Submitting...' : 'Submit Report'}
                                 </button>
                             </div>
                         </form>
                     )}
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 

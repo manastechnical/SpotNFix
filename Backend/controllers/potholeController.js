@@ -3,8 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const checkNearbyPotholes = async (req, res) => {
     const { lat, lng, radius } = req.query;
-        const searchRadius = radius || 50;
-
+    const searchRadius = radius || 50;
 
     if (!lat || !lng) {
         return res.status(400).json({ error: 'Latitude and longitude are required.' });
@@ -16,12 +15,62 @@ export const checkNearbyPotholes = async (req, res) => {
             lng_input: parseFloat(lng),
             radius_meters: parseFloat(searchRadius)
         });
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
 
         res.status(200).json(data);
     } catch (error) {
-        console.error('Error checking for nearby potholes:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('RPC failed for nearby potholes, attempting fallback:', error);
+
+        // Fallback: Bounding box + haversine filter in JS
+        try {
+            const centerLat = parseFloat(lat);
+            const centerLng = parseFloat(lng);
+            const radiusMeters = parseFloat(searchRadius);
+
+            // Approximate bounding box in degrees
+            const metersPerDegreeLat = 111_320; 
+            const metersPerDegreeLng = 111_320 * Math.cos(centerLat * Math.PI / 180);
+            const dLat = radiusMeters / metersPerDegreeLat;
+            const dLng = radiusMeters / metersPerDegreeLng;
+
+            const minLat = centerLat - dLat;
+            const maxLat = centerLat + dLat;
+            const minLng = centerLng - dLng;
+            const maxLng = centerLng + dLng;
+
+            const { data: boxData, error: boxError } = await supabase
+                .from('potholes')
+                .select('id, latitude, longitude, description, severity, status')
+                .gte('latitude', minLat)
+                .lte('latitude', maxLat)
+                .gte('longitude', minLng)
+                .lte('longitude', maxLng);
+
+            if (boxError) {
+                throw boxError;
+            }
+
+            const toRad = (deg) => deg * Math.PI / 180;
+            const earthRadiusM = 6_371_000;
+            const filtered = (boxData || []).filter((p) => {
+                if (p.latitude == null || p.longitude == null) return false;
+                const dLatRad = toRad(p.latitude - centerLat);
+                const dLngRad = toRad(p.longitude - centerLng);
+                const a = Math.sin(dLatRad / 2) ** 2 +
+                          Math.cos(toRad(centerLat)) * Math.cos(toRad(p.latitude)) *
+                          Math.sin(dLngRad / 2) ** 2;
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                const distance = earthRadiusM * c;
+                return distance <= radiusMeters;
+            });
+
+            return res.status(200).json(filtered);
+        } catch (fallbackError) {
+            console.error('Fallback failed for nearby potholes:', fallbackError);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
     }
 };
 
@@ -51,23 +100,21 @@ export const reportPothole = async (req, res) => {
             .from('pothole-images')
             .getPublicUrl(fileName);
 
-
         // --- 2. Save Pothole Details to the Database ---
         const { data: potholeData, error: potholeError } = await supabase
             .from('potholes')
             .insert([
                 {
-                    user_id: user_id, // You need to get the logged-in user's ID on the frontend
+                    user_id: user_id,
                     latitude: parseFloat(lat),
                     longitude: parseFloat(lng),
                     description: description,
                     severity: severity,
-                    status: 'reported', // Default status
-                    // We'll add the image URL to the images table next
+                    status: 'reported',
                 },
             ])
-            .select() // Use .select() to get the newly created pothole record back
-            .single(); // We expect only one record back
+            .select()
+            .single();
 
         if (potholeError) {
             throw potholeError;
@@ -80,14 +127,13 @@ export const reportPothole = async (req, res) => {
                 {
                     pothole_id: potholeData.id,
                     image_url: publicUrl,
-                    type: 'before_repair', // Example type
+                    type: 'before_repair',
                 }
             ]);
 
         if (imageError) {
             throw imageError;
         }
-
 
         res.status(201).json({ message: "Pothole reported successfully!", data: potholeData });
 
@@ -108,14 +154,38 @@ export const getAllPotholes = async (req, res) => {
                 description,
                 severity,
                 status,
-                images ( image_url )
-            `);
+                bids (
+                    id,
+                    amount,
+                    description,
+                    status,
+                    contractor_id,
+                    users (
+                        name,
+                        email
+                    )
+                )
+            `)
+            .order('id'); // Changed from ordering by bids.created_at
 
         if (error) throw error;
 
-        res.status(200).json(data);
+        // Transform the data to include the current (lowest) bid
+        const transformedData = data.map(pothole => ({
+            ...pothole,
+            current_bid: pothole.bids && pothole.bids.length > 0 
+                ? pothole.bids.reduce((lowest, current) => 
+                    current.amount < lowest.amount ? current : lowest
+                  , pothole.bids[0])
+                : null
+        }));
+
+        res.status(200).json(transformedData);
     } catch (error) {
         console.error("Error fetching all potholes:", error);
-        res.status(500).json({ error: 'Failed to fetch potholes.' });
+        res.status(500).json({ 
+            error: 'Failed to fetch potholes.',
+            details: error.message 
+        });
     }
 };

@@ -10,52 +10,52 @@ import Sidebar from './components/utils/Sidebar';
 import Dashboard from './components/protected/Dashboard/Dashboard';
 import ReportPothole from './components/protected/ReportPothole';
 import PotholeMap from './components/protected/PotholeMap';
+import ContractorBidding from './components/protected/ContractorBidding';
 
 const RoutesConfig = () => {
-  const isLoggedIn = useSelector(isUserLoggedIn);
-  const ifDMenuState = useSelector(dashboardMenuState);
-  const location = useLocation();
-  const isMapView = location.pathname === '/map-view';
+    const isLoggedIn = useSelector(isUserLoggedIn);
+    const ifDMenuState = useSelector(dashboardMenuState);
+    const location = useLocation();
+    const isMapView = location.pathname === '/map-view';
 
-  if (!isLoggedIn) {
-    return (
-      <Routes>
-        <Route
-          path="/"
-          key={'home'}
-          className="transition-all scrollbar-hide"
-          element={[<HeroPage key={'HeroPage'} />]}
-        />
-        <Route
-          path="/login"
-          className="transition-all scrollbar-hide"
-          element={[<Login />]}
-        />
-        <Route
-          path="/verify-email"
-          className="transition-all scrollbar-hide"
-          element={[<VerifyEmail />]}
-        />
-      </Routes>
-    );
-  } else {
-    return (
-      <div
-        className={`w-full h-screen bg-[#121212] flex flex-col`}
-      >
-        <Sidebar isOpen={ifDMenuState} />
-        <NavBar />
-        <div className={`flex-grow ${isMapView ? 'relative' : 'overflow-y-auto'} ${ifDMenuState ? 'pl-16' : ''}`}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/pd" element={<ReportPothole />} />
-            <Route path="/map-view" element={<PotholeMap />} />
-          </Routes>
-        </div>
-      </div>
-    );
-  }
+    if (!isLoggedIn) {
+        return (
+            <Routes>
+                <Route
+                    path="/"
+                    key={'home'}
+                    className="transition-all scrollbar-hide"
+                    element={<HeroPage />}
+                />
+                <Route
+                    path="/login"
+                    className="transition-all scrollbar-hide"
+                    element={<Login />}
+                />
+                <Route
+                    path="/verify-email"
+                    className="transition-all scrollbar-hide"
+                    element={<VerifyEmail />}
+                />
+            </Routes>
+        );
+    } else {
+        return (
+            <div className="w-full h-screen bg-[#121212] flex flex-col">
+                <Sidebar isOpen={ifDMenuState} />
+                <NavBar />
+                <div className={`flex-grow ${isMapView ? 'relative' : 'overflow-y-auto'} ${ifDMenuState ? 'pl-16' : ''}`}>
+                    <Routes>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/dashboard" element={<Dashboard />} />
+                        <Route path="/pd" element={<ReportPothole />} />
+                        <Route path="/map-view" element={<PotholeMap />} />
+                        <Route path="/contractor-bidding" element={<ContractorBidding />} />
+                    </Routes>
+                </div>
+            </div>
+        );
+    }
 };
 
 export default RoutesConfig;

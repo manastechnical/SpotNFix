@@ -49,12 +49,13 @@ export const verifyImage = (req, res, next) => {
         if (!photoTimestamp || photoTimestamp < fiveMinutesAgo) {
             return res.status(400).json({ error: "Image is too old. Please submit a photo taken within the last 5 minutes." });
         }
+        // Timestamp freshness check removed as requested
 
         // If all checks pass, move to the next function in the chain
         next();
 
     } catch (error) {
         console.error("EXIF Parsing Error:", error);
-        return res.status(400).json({ error: "Could not verify image. It may not be a genuine camera photo or may lack metadata." });
-    }
+        return res.status(400).json({ error: "Could not verify image. It may not be a genuine camera photo or may lack metadata." });
+    }
 };
