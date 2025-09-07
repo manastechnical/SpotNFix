@@ -9,7 +9,8 @@ import {
   setDFeature,
 } from '../../app/DashboardSlice';
 import { authEndpoints } from '../Apis';
-const { LOGIN_API, REGISTER, VALIDATE_GMAIL, GOOGLE_SIGN_IN } = authEndpoints;
+const { LOGIN_API, REGISTER, VALIDATE_GMAIL, GOOGLE_SIGN_IN, REGISTER_CONTRACTOR, REGISTER_GOVERNMENT_OFFICIAL } = authEndpoints;
+
 export function login(email_id,role,password, navigate) {
   return async (dispatch) => {
     const loadingToast = toast.loading('Letting you in...');
@@ -185,4 +186,59 @@ export function loginWithGoogle(credentialResponse, navigate) {
 
     toast.dismiss(loadingToast);
   };
+
+}
+
+export function registerContractor(formData, navigate) {
+    return async (dispatch) => {
+        const loadingToast = toast.loading('Registering contractor...');
+        try {
+            const response = await apiConnector('POST', REGISTER_CONTRACTOR, formData, {
+                "Content-Type": "multipart/form-data",
+            });
+
+            console.log("CONTRACTOR REGISTRATION RESPONSE: ", response);
+
+            if (response.data.success) {
+                toast.success('Registration successful! Please check your email to verify your account.');
+                // We need the user ID to pass to the verification page
+                // Assuming the backend sends it back in the response
+                const userId = response.data.data.u_id; 
+                dispatch(setAccountAfterRegister({ id: userId }));
+                navigate('/verify-email');
+            } else {
+                throw new Error(response.data.message);
+            }
+        } catch (error) {
+            console.log('Contractor registration error:', error);
+            toast.error(error.response?.data?.message || 'Registration failed');
+        }
+        toast.dismiss(loadingToast);
+    };
+}
+
+export function registerGovernmentOfficial(formData, navigate) {
+    return async (dispatch) => {
+        const loadingToast = toast.loading('Registering government official...');
+        try {
+            const response = await apiConnector('POST', REGISTER_GOVERNMENT_OFFICIAL, formData, {
+                "Content-Type": "multipart/form-data",
+            });
+
+            console.log("GOVT OFFICIAL REGISTRATION RESPONSE: ", response);
+
+            if (response.data.success) {
+                toast.success('Registration successful! Please check your email to verify your account.');
+                const userId = response.data.data.u_id; 
+                dispatch(setAccountAfterRegister({ id: userId }));
+                navigate('/verify-email');
+            } else {
+                throw new Error(response.data.message);
+            }
+        } catch (error) {
+            console.log('Government official registration error:', error);
+            toast.error(error.response?.data?.message || 'Registration failed');
+        }
+        toast.dismiss(loadingToast);
+    };
 }

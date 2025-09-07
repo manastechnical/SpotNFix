@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { GoogleLogin } from '@react-oauth/google';
 import {
@@ -29,12 +29,12 @@ const Login = () => {
   }, [isLoginView]);
 
   const handleSubmit = (e) => {
-    console.log('Form submitted',email, password, name, mobile, userType);
+    console.log('Form submitted', email, password, name, mobile, userType);
     e.preventDefault();
     if (isLoginView) {
       dispatch(login(email, userType, password, navigate));
     } else {
-      dispatch(register(name, email, password, mobile,userType, navigate));
+      dispatch(register(name, email, password, mobile, userType, navigate));
     }
   };
 
@@ -112,7 +112,7 @@ const Login = () => {
                   <option value="">Select user type</option>
                   <option value="citizen">Citizen</option>
                   <option value="contractor">Contractor</option>
-                  <option value="admin">Admin</option>
+                  <option value="government">Govt Official</option>
                 </select>
               </div>
               <div>
@@ -206,6 +206,18 @@ const Login = () => {
                 Sign up
               </button>
             </p>
+            <p className="mt-6 text-center text-sm text-gray-600">
+              Are you a contractor?{' '}
+              <Link to="/register-contractor" className="font-medium text-green-600 hover:text-green-500">
+                Register here
+              </Link>
+            </p>
+            <p className="mt-2 text-center text-sm text-gray-600">
+              Are you a government official?{' '}
+              <Link to="/register-government-official" className="font-medium text-green-600 hover:text-green-500">
+                Register here
+              </Link>
+            </p>
           </div>
         ) : (
           <div>
@@ -248,7 +260,7 @@ const Login = () => {
                   <option value="">Select user type</option>
                   <option value="citizen">Citizen</option>
                   <option value="contractor">Contractor</option>
-                  <option value="admin">Admin</option>
+                  <option value="government">Govt Official</option>
                 </select>
               </div>
               <div>
@@ -343,16 +355,6 @@ const Login = () => {
                 </div>
               </div>
             </div>
-
-            <p className="mt-6 text-center text-sm text-gray-600">
-              Already have an account?{' '}
-              <button
-                onClick={toggleView}
-                className="font-medium text-green-600 hover:text-green-500"
-              >
-                Sign in
-              </button>
-            </p>
           </div>
         )}
 

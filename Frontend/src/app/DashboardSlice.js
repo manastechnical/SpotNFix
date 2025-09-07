@@ -7,6 +7,8 @@ const initialState = {
   account: localData ? localData : [],
   isLoggedIn: localData ? localData.isLoggedIn : false,
   profileData: [],
+  adminToken: localStorage.getItem('adminToken') || null,
+
 };
 
 const DashboardSlice = createSlice({
@@ -46,6 +48,14 @@ const DashboardSlice = createSlice({
       const temp1 = { ...state.account, isLoggedIn: state.isLoggedIn };
       localStorage.setItem('account', JSON.stringify(temp1));
     },
+    setAdminToken: (state, action) => {
+      state.adminToken = action.payload;
+      localStorage.setItem('adminToken', action.payload);
+    },
+    clearAdminToken: (state) => {
+      state.adminToken = null;
+      localStorage.removeItem('adminToken');
+    },
   },
 });
 
@@ -56,6 +66,7 @@ export const {
   setAccount,
   setAccountAfterRegister,
   LogOut,
+  setAdminToken, clearAdminToken,
 } = DashboardSlice.actions;
 
 export const dashboardMenuState = (state) => state.dashboard.dashboardMenuState;
@@ -63,5 +74,6 @@ export const dashboardFeature = (state) => state.dashboard.dashboardFeature;
 export const isUserLoggedIn = (state) => state.dashboard.isLoggedIn;
 export const selectAccount = (state) => state.dashboard.account;
 export const selectProfileData = (state) => state.dashboard.profileData;
+export const isAdminLoggedIn = (state) => !!state.dashboard.adminToken;
 
 export default DashboardSlice.reducer;

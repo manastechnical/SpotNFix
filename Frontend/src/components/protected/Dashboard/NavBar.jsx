@@ -27,7 +27,7 @@ function NavBar() {
 
   const logout = () => {
     dispatch(LogOut());
-    navigate('/');
+    window.location.href = 'https://spotnfix.netlify.app/';
   };
 
   return (

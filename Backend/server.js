@@ -10,6 +10,7 @@ import govRoutes from './routes/govRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
 import potholeRoutes from './routes/potholeRoutes.js';
 import bidRoutes from './routes/bidRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.use('/api/gov', govRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/potholes', potholeRoutes); 
 app.use('/api/bids', bidRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

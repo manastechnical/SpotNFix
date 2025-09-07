@@ -6,6 +6,8 @@ export const authEndpoints = {
   REGISTER: BaseURL + 'api/auth/register',
   VALIDATE_GMAIL: BaseURL + 'api/auth/validate',
   GOOGLE_SIGN_IN: BaseURL + 'api/auth/sign-in-google',
+  REGISTER_CONTRACTOR: BaseURL + 'api/auth/register-contractor',
+  REGISTER_GOVERNMENT_OFFICIAL: BaseURL + 'api/auth/register-government-official',
 };
 
 export const uploadEndPoints = {
@@ -14,4 +16,10 @@ export const uploadEndPoints = {
 
 export const bidEndpoints = {
   SUBMIT_BID: BaseURL + 'api/bids/submit',
+};
+
+export const adminEndpoints = {
+    ADMIN_LOGIN_API: BaseURL + 'api/admin/login',
+    GET_PENDING_VERIFICATIONS_API: BaseURL + 'api/admin/pending-verifications',
+    UPDATE_VERIFICATION_API: BaseURL + 'api/admin/update-verification',
 };

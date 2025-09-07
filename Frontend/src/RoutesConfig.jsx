@@ -3,7 +3,7 @@ import { Routes, Route, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { HeroPage, Login, VerifyEmail } from './components';
 import { dashboardMenuState } from './app/DashboardSlice';
-import { isUserLoggedIn } from './app/DashboardSlice';
+import { isAdminLoggedIn, isUserLoggedIn } from './app/DashboardSlice';
 
 import NavBar from './components/protected/Dashboard/NavBar';
 import Sidebar from './components/utils/Sidebar';
@@ -11,12 +11,29 @@ import Dashboard from './components/protected/Dashboard/Dashboard';
 import ReportPothole from './components/protected/ReportPothole';
 import PotholeMap from './components/protected/PotholeMap';
 import ContractorBidding from './components/protected/ContractorBidding';
+import ContractorRegister from "./components/common/ContractorRegister";
+import GovernmentOfficialRegister from "./components/common/GovernmentOfficialRegister";
+import SuperAdminDashboard from './components/protected/Dashboard/SuperAdminDashboard';
+import AdminLogin from './components/common/AdminLogin';
 
 const RoutesConfig = () => {
     const isLoggedIn = useSelector(isUserLoggedIn);
     const ifDMenuState = useSelector(dashboardMenuState);
     const location = useLocation();
     const isMapView = location.pathname === '/map-view';
+    const isAdminAuth = useSelector(isAdminLoggedIn);
+
+    // Admin Route Logic
+    if (location.pathname.startsWith('/admin')) {
+        return (
+            <Routes>
+                <Route
+                    path="/admin"
+                    element={isAdminAuth ? <SuperAdminDashboard /> : <AdminLogin />}
+                />
+            </Routes>
+        );
+    }
 
     if (!isLoggedIn) {
         return (
@@ -37,6 +54,8 @@ const RoutesConfig = () => {
                     className="transition-all scrollbar-hide"
                     element={<VerifyEmail />}
                 />
+                <Route path="/register-contractor" className="transition-all scrollbar-hide" element={<ContractorRegister />} />
+        <Route path="/register-government-official" className="transition-all scrollbar-hide" element={<GovernmentOfficialRegister />} />
             </Routes>
         );
     } else {
@@ -51,6 +70,7 @@ const RoutesConfig = () => {
                         <Route path="/pd" element={<ReportPothole />} />
                         <Route path="/map-view" element={<PotholeMap />} />
                         <Route path="/contractor-bidding" element={<ContractorBidding />} />
+                        <Route path="/admin" element={<SuperAdminDashboard />} />
                     </Routes>
                 </div>
             </div>

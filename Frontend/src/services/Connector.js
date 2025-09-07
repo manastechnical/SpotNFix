@@ -11,10 +11,14 @@ export const axiosInstance = axios.create({
 export const apiConnector = (method, url, bodyData, headers, params) => {
   console.log('API Connector: ', method, url, bodyData, headers, params);
   const accountData = JSON.parse(localStorage.getItem('account'));
+    const adminToken = localStorage.getItem('adminToken');
+
   let token;
 
   if (accountData) {
     token = accountData.token;
+  } else if (adminToken) {
+    token = adminToken;
   }
 
   headers = headers || {};
