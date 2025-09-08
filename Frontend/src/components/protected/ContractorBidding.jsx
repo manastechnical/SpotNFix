@@ -9,7 +9,6 @@ import { toast } from "react-hot-toast";
 // Set Mapbox access token
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
-// --- NEW: URL for the placeholder image ---
 const placeholderImageUrl = "https://via.placeholder.com/400x300.png?text=No+Image+Available";
 
 const ContractorBidding = () => {
@@ -26,8 +25,6 @@ const ContractorBidding = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [potholeAddress, setPotholeAddress] = useState("");
   const [isAddressLoading, setIsAddressLoading] = useState(false);
-  
-  // --- NEW: State for image carousel ---
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   // Fetch all potholes from the API
@@ -54,13 +51,11 @@ const ContractorBidding = () => {
 
   useEffect(() => {
     setCurrentImageIndex(0);
-
     const fetchAddress = async () => {
       if (!selectedPothole) {
         setPotholeAddress("");
         return;
       }
-
       setIsAddressLoading(true);
       try {
         const { longitude, latitude } = selectedPothole;
@@ -69,7 +64,6 @@ const ContractorBidding = () => {
           `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${accessToken}`
         );
         const data = await response.json();
-
         if (data.features && data.features.length > 0) {
           setPotholeAddress(data.features[0].place_name);
         } else {
@@ -82,10 +76,8 @@ const ContractorBidding = () => {
         setIsAddressLoading(false);
       }
     };
-
     fetchAddress();
   }, [selectedPothole]);
-
 
   // Initialize and manage map instance
   useEffect(() => {
@@ -112,17 +104,28 @@ const ContractorBidding = () => {
   // Add pothole markers to the map
   useEffect(() => {
     if (!mapRef.current || !potholes.length) return;
+
+    // First, remove any existing markers from the map
     markersRef.current.forEach(marker => marker.remove());
-    markersRef.current = [];
-    potholes.forEach(pothole => {
-      let color = pothole.severity === 'High' ? '#EF4444' : pothole.severity === 'Medium' ? '#F59E0B' : '#10B981';
-      const marker = new mapboxgl.Marker({ color }).setLngLat([pothole.longitude, pothole.latitude]).addTo(mapRef.current);
-      marker.getElement().addEventListener('click', () => {
-        setSelectedPothole(pothole);
+    markersRef.current = []; // Clear the reference array
+
+    // ✅ MODIFIED: Filter for verified potholes before creating markers
+    potholes
+      .filter(pothole => pothole.verify === true) // This is the crucial check
+      .forEach(pothole => {
+        // This code now only runs for potholes that passed the filter
+        let color = pothole.severity === 'High' ? '#EF4444' : pothole.severity === 'Medium' ? '#F59E0B' : '#10B981';
+        const marker = new mapboxgl.Marker({ color }).setLngLat([pothole.longitude, pothole.latitude]).addTo(mapRef.current);
+        
+        marker.getElement().addEventListener('click', () => {
+          setSelectedPothole(pothole);
+        });
+
+        // Add the new marker to our reference array for future cleanup
+        markersRef.current.push(marker);
       });
-      markersRef.current.push(marker);
-    });
   }, [potholes]);
+
 
   const hasUserBid = (pothole) => {
     return pothole?.bids?.some(bid => bid.contractor_id === currentUser?.id);
@@ -156,7 +159,6 @@ const ContractorBidding = () => {
     }
   };
 
-  // --- NEW: Carousel navigation functions ---
   const handlePrevImage = () => {
     setCurrentImageIndex(prev => (prev > 0 ? prev - 1 : selectedPothole.images.length - 1));
   };
@@ -167,10 +169,7 @@ const ContractorBidding = () => {
 
   return (
     <div className="relative w-full h-full">
-      {/* Map Container */}
       <div ref={mapContainerRef} className="w-full h-full" />
-
-      {/* Floating Pothole Details Card */}
       {selectedPothole && (
         <div className="absolute bottom-5 right-5 z-10 bg-white rounded-lg shadow-2xl p-4 w-full max-w-sm flex flex-col gap-3 animate-fade-in">
           <div className="flex justify-between items-center">
@@ -183,7 +182,6 @@ const ContractorBidding = () => {
               &times;
             </button>
           </div>
-          
           <div>
             <p className="text-sm text-gray-700">
               <span className="font-semibold">Description:</span>{" "}
@@ -194,20 +192,16 @@ const ContractorBidding = () => {
               {isAddressLoading ? "Fetching address..." : potholeAddress}
             </p>
           </div>
-
-          {/* --- MODIFIED: Image Carousel Display --- */}
           <div className="relative w-full h-48 bg-gray-200 rounded-lg">
             <img
               src={
                 selectedPothole.images && selectedPothole.images.length > 0
                   ? selectedPothole.images[currentImageIndex].image_url
-                  : placeholderImageUrl
+                                    : placeholderImageUrl
               }
               alt="Pothole"
               className="w-full h-full rounded-lg object-cover"
             />
-            
-            {/* Carousel Controls: Show only if there are multiple images */}
             {selectedPothole.images && selectedPothole.images.length > 1 && (
               <>
                 <button
@@ -230,7 +224,6 @@ const ContractorBidding = () => {
               </>
             )}
           </div>
-          
           <div className="flex justify-between items-center">
             <span className={`px-3 py-1 text-xs font-bold rounded-full 
               ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700"
@@ -239,7 +232,6 @@ const ContractorBidding = () => {
               {selectedPothole.severity} Severity
             </span>
           </div>
-          
           <div className="border-t pt-3">
               <p className="text-sm text-gray-700">
                 <span className="font-semibold">Current Lowest Bid:</span>{" "}
@@ -250,7 +242,6 @@ const ContractorBidding = () => {
                 {selectedPothole.current_bid?.users?.name || "N/A"}
               </p>
           </div>
-          
           <Button
             className={`w-full mt-2 ${hasUserBid(selectedPothole)
               ? 'bg-gray-400 cursor-not-allowed'
@@ -264,8 +255,6 @@ const ContractorBidding = () => {
           </Button>
         </div>
       )}
-
-      {/* Bidding Modal */}
       {activePothole && (
         <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50" onClick={() => setActivePothole(null)}>
           <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 max-w-md" onClick={(e) => e.stopPropagation()}>
@@ -285,3 +274,4 @@ const ContractorBidding = () => {
 };
 
 export default ContractorBidding;
+

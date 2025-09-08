@@ -15,6 +15,7 @@ import ContractorRegister from "./components/common/ContractorRegister";
 import GovernmentOfficialRegister from "./components/common/GovernmentOfficialRegister";
 import SuperAdminDashboard from './components/protected/Dashboard/SuperAdminDashboard';
 import AdminLogin from './components/common/AdminLogin';
+import ApprovePothole from './components/protected/ApprovePothole';
 
 const RoutesConfig = () => {
     const isLoggedIn = useSelector(isUserLoggedIn);
@@ -71,6 +72,7 @@ const RoutesConfig = () => {
                         <Route path="/map-view" element={<PotholeMap />} />
                         <Route path="/contractor-bidding" element={<ContractorBidding />} />
                         <Route path="/admin" element={<SuperAdminDashboard />} />
+                        <Route path="/approve-pothole" element={<ApprovePothole />} />
                     </Routes>
                 </div>
             </div>

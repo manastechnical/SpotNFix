@@ -2,7 +2,7 @@ import { HomeIcon } from 'lucide-react';
 
 const getFeatures = () => {
   const userData = JSON.parse(localStorage.getItem('account'));
-  
+
   const features = [
     {
       featureName: 'Home',
@@ -29,6 +29,14 @@ const getFeatures = () => {
       displayName: 'Contractor Bidding',
       logoUsed: HomeIcon,
       route: '/contractor-bidding',
+    });
+  }
+  if (userData?.role === 'government') {
+    features.push({
+      featureName: 'approve-pothole',
+      displayName: 'Approve Pothole',
+      logoUsed: HomeIcon,
+      route: '/approve-pothole',
     });
   }
 

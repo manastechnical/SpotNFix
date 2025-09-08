@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 // Import both controller functions
-import { checkNearbyPotholes, getAllPotholes, reportPothole } from '../controllers/potholeController.js'; 
+import { checkNearbyPotholes, getAllPotholes, reportPothole,verifyPothole,discardPothole } from '../controllers/potholeController.js'; 
 import { verifyImage } from '../middleware/verifyImage.js';
 
 const router = express.Router();
@@ -20,5 +20,8 @@ router.post(
 );
 
 router.get('/all', getAllPotholes);
+
+router.patch('/verify/:id', verifyPothole);
+router.patch('/discard/:id', discardPothole);
 
 export default router;

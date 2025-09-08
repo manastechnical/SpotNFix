@@ -23,3 +23,8 @@ export const adminEndpoints = {
     GET_PENDING_VERIFICATIONS_API: BaseURL + 'api/admin/pending-verifications',
     UPDATE_VERIFICATION_API: BaseURL + 'api/admin/update-verification',
 };
+
+export const potholeEndpoints = {
+    VERIFY_POTHOLE: BaseURL + 'api/potholes/verify',    
+    DISCARD_POTHOLE: BaseURL + 'api/potholes/discard', 
+};

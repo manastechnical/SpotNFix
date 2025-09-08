@@ -154,6 +154,7 @@ export const getAllPotholes = async (req, res) => {
                 description,
                 severity,
                 status,
+                verify,
                 bids (
                     id,
                     amount,
@@ -187,5 +188,58 @@ export const getAllPotholes = async (req, res) => {
             error: 'Failed to fetch potholes.',
             details: error.message 
         });
+    }
+};
+
+export const verifyPothole = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const { data, error } = await supabase
+            .from('potholes')
+            .update({ verify: true })
+            .eq('id', id)
+            .select()
+            .single(); // .single() to return the updated record
+
+        if (error) {
+            if (error.code === 'PGRST116') { // Error code for "No rows found"
+                return res.status(404).json({ error: 'Pothole not found.' });
+            }
+            throw error;
+        }
+
+        res.status(200).json({ message: 'Pothole verified successfully!', data });
+
+    } catch (error) {
+        console.error('Error verifying pothole:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// --- NEW: Function to discard a pothole ---
+export const discardPothole = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const { data, error } = await supabase
+            .from('potholes')
+            .update({ status: 'discarded' })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) {
+             if (error.code === 'PGRST116') {
+                return res.status(404).json({ error: 'Pothole not found.' });
+            }
+            throw error;
+        }
+
+        res.status(200).json({ message: 'Pothole discarded successfully!', data });
+
+    } catch (error) {
+        console.error('Error discarding pothole:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 };
