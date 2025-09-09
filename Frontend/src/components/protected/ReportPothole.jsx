@@ -4,6 +4,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { useDropzone } from 'react-dropzone';
 import toast, { Toaster } from 'react-hot-toast';
 import axios from 'axios';
+import { mlEndpoints } from '../../services/Apis';
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { FiAlertTriangle } from 'react-icons/fi';
@@ -55,17 +56,17 @@ const ReportPothole = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [severity, setSeverity] = useState(null);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [crop, setCrop] = useState();
     const [imgSrc, setImgSrc] = useState('');
+    const [mlChecking, setMlChecking] = useState(false);
+    const [mlDetected, setMlDetected] = useState(null);
+    const [mlDetections, setMlDetections] = useState([]);
     const [address, setAddress] = useState("");
     const [isGeocoding, setIsGeocoding] = useState(false);
     const [nearbyPotholes, setNearbyPotholes] = useState([]);
-    const [isChecking, setIsChecking] = useState(false);
+    const [, setIsChecking] = useState(false);
     const [showDuplicates, setShowDuplicates] = useState(false);
-    const [isDetecting, setIsDetecting] = useState(false);
-    const [detectionResult, setDetectionResult] = useState(null);
-    const [hasPothole, setHasPothole] = useState(false);
+    
 
     // Get user ID from Redux state
     const { account } = useSelector((state) => state.dashboard);
@@ -231,67 +232,42 @@ const ReportPothole = () => {
                 const reader = new FileReader();
                 reader.addEventListener('load', () => setImgSrc(reader.result.toString() || ''));
                 reader.readAsDataURL(acceptedFiles[0]);
-                detectPotholeInImage(acceptedFiles[0]);
+                // Trigger ML detection
+                console.log('[FE] Selected file:', acceptedFiles[0]);
+                detectWithML(acceptedFiles[0]);
             }
         }
     });
 
-    const detectPotholeInImage = async (file) => {
-        setIsDetecting(true);
-        setDetectionResult(null);
-        setHasPothole(false);
-        setSeverity(null);
-
+    const detectWithML = async (file) => {
         try {
+            setMlChecking(true);
+            setMlDetected(null);
+            setMlDetections([]);
             const formData = new FormData();
-            formData.append('file', file);
-
-            const response = await fetch('http://127.0.0.1:5000/detect', {
-                method: 'POST',
-                body: formData,
+            formData.append('image', file);
+            console.log('[FE] Calling ML detect at:', mlEndpoints.DETECT);
+            const { data } = await axios.post(mlEndpoints.DETECT, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
-
-            if (!response.ok) {
-                throw new Error(`Detection failed: ${response.status}`);
-            }
-
-            const result = await response.json();
-            setDetectionResult(result);
-
-            if (result.num_detections > 0) {
-                setHasPothole(true);
-                // Analyze severity based on detection confidence
-                analyzeImageSeverity(result.detections[0].confidence);
-                toast.success(`Pothole detected! Found ${result.num_detections} pothole(s)`);
+            console.log('[FE] ML response:', data);
+            if (data && data.success) {
+                setMlDetected(Boolean(data.detected));
+                setMlDetections(data.detections || []);
+                if (!data.detected) {
+                    toast.error('No potholes detected in the image. Please upload a valid pothole image.');
+                }
             } else {
-                setHasPothole(false);
-                toast.error("No pothole detected in the image. Please upload a clear image of a pothole.");
+                toast.error('Detection failed. Try another image.');
+                setMlDetected(false);
             }
-        } catch (error) {
-            console.error('ML Detection error:', error);
-            setHasPothole(false);
-            toast.error("Failed to analyze image. Please try again.");
+        } catch (e) {
+            console.error('[FE] ML detect error', e);
+            toast.error('Unable to reach detection service.');
+            setMlDetected(false);
         } finally {
-            setIsDetecting(false);
+            setMlChecking(false);
         }
-    };
-
-    const analyzeImageSeverity = async (confidence) => {
-        setIsAnalyzing(true);
-        setSeverity(null);
-
-        // Determine severity based on confidence score
-        let severity;
-        if (confidence >= 0.8) {
-            severity = 'High';
-        } else if (confidence >= 0.6) {
-            severity = 'Medium';
-        } else {
-            severity = 'Low';
-        }
-
-        setSeverity(severity);
-        setIsAnalyzing(false);
     };
 
     const handleSubmit = async (e) => {
@@ -328,8 +304,6 @@ const ReportPothole = () => {
             setSeverity(null);
             setNearbyPotholes([]);
             setShowDuplicates(false);
-            setDetectionResult(null);
-            setHasPothole(false);
             setStep(1);
         } catch (err) {
             console.error(err); // Keep this for debugging
@@ -411,92 +385,21 @@ const ReportPothole = () => {
                                 </div>
                             )}
 
-                            {/* Detection Status */}
-                            <div className="mt-4">
-                                {isDetecting && (
-                                    <div className="flex items-center justify-center p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
-                                        <span className="text-blue-700">Analyzing image for potholes...</span>
-                                    </div>
-                                )}
-
-                                {!isDetecting && detectionResult && (
-                                    <div className={`p-3 rounded-lg border ${hasPothole
-                                            ? 'bg-green-50 border-green-200 text-green-700'
-                                            : 'bg-red-50 border-red-200 text-red-700'
-                                        }`}>
-                                        <div className="flex items-center">
-                                            {hasPothole ? (
-                                                <>
-                                                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                                    </svg>
-                                                    <span className="font-semibold">
-                                                        Pothole Detected! ({detectionResult.num_detections} found)
-                                                    </span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1h-1z" clipRule="evenodd" />
-                                                    </svg>
-                                                    <span className="font-semibold">
-                                                        No Pothole Detected
-                                                    </span>
-                                                </>
-                                            )}
-                                        </div>
-
-                                        {hasPothole && detectionResult.detections && (
-                                            <div className="mt-2 text-sm">
-                                                <p>Confidence: {(detectionResult.detections[0].confidence * 100).toFixed(1)}%</p>
-                                                <p>Class: {detectionResult.detections[0].class_name}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {!isDetecting && !hasPothole && mediaFiles.length > 0 && (
-                                    <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center">
-                                                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v4a1 1 0 001 1h1a1 1 0 001-1V6a1 1 0 00-1-1h-1z" clipRule="evenodd" />
-                                                </svg>
-                                                <span className="font-semibold">Please upload a clear image of a pothole</span>
-                                            </div>
-                                            <button
-                                                onClick={() => detectPotholeInImage(mediaFiles[0])}
-                                                className="ml-2 px-3 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 rounded-full hover:bg-yellow-200 transition-colors"
-                                            >
-                                                Retry Detection
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Guidance Message */}
-                            {mediaFiles.length > 0 && !hasPothole && (
-                                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                                    <div className="flex items-center text-red-700">
-                                        <svg className="w-5 h-5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1h-1z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm">
-                                            <strong>Cannot proceed:</strong> No pothole detected in the uploaded image. Please upload a clear image showing a pothole.
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
+                            {/* ML gating removed */}
 
                             <button
                                 onClick={() => setStep(2)}
-                                disabled={mediaFiles.length === 0 || !hasPothole}
+                                disabled={mediaFiles.length === 0 || mlChecking || mlDetected === false}
                                 className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg w-full font-semibold hover:bg-blue-700 transition disabled:bg-gray-400"
                             >
-                                Next
+                                {mlChecking ? 'Analyzing...' : 'Next'}
                             </button>
+                            {mlDetected === false && (
+                                <p className="mt-2 text-sm text-red-600">No potholes detected in the image. Please upload a valid pothole image.</p>
+                            )}
+                            {mlDetected && mlDetections?.length > 0 && (
+                                <p className="mt-2 text-sm text-green-700">Potholes detected: {mlDetections.length}</p>
+                            )}
                         </div>
                     )}
                     {step === 2 && (
@@ -521,7 +424,7 @@ const ReportPothole = () => {
                             </div>
                             <div className="mt-4">
                                 <label className="block text-sm font-medium">Detected Severity</label>
-                                {isAnalyzing && <p className="text-sm text-gray-500">Analyzing image...</p>}
+                                {/* isAnalyzing && <p className="text-sm text-gray-500">Analyzing image...</p> */}
                                 {severity && (
                                     <div className={`text-sm font-bold p-2 rounded-md inline-block ${severity === 'High' ? 'bg-red-100 text-red-800' :
                                         severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :

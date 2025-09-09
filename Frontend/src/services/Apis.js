@@ -1,5 +1,6 @@
 //All the API endpoints will be declared here and then this will be used in entire frontend to access the endpoints...
 const BaseURL = import.meta.env.VITE_API_BASE_URL;
+export const MLBaseURL = import.meta.env.VITE_ML_BASE_URL || 'http://localhost:5001/';
 
 export const authEndpoints = {
   LOGIN_API: BaseURL + 'api/auth/login',
@@ -27,4 +28,8 @@ export const adminEndpoints = {
 export const potholeEndpoints = {
     VERIFY_POTHOLE: BaseURL + 'api/potholes/verify',    
     DISCARD_POTHOLE: BaseURL + 'api/potholes/discard', 
+};
+
+export const mlEndpoints = {
+  DETECT: MLBaseURL + 'detect',
 };
