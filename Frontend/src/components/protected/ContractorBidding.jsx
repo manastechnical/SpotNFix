@@ -111,7 +111,7 @@ const ContractorBidding = () => {
 
     // ✅ MODIFIED: Filter for verified potholes before creating markers
     potholes
-      .filter(pothole => pothole.verify === true) // This is the crucial check
+      .filter(pothole => pothole.verify === true && pothole.status==="reported") // This is the crucial check
       .forEach(pothole => {
         // This code now only runs for potholes that passed the filter
         let color = pothole.severity === 'High' ? '#EF4444' : pothole.severity === 'Medium' ? '#F59E0B' : '#10B981';

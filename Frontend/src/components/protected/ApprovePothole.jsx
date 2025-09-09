@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import { apiConnector } from "../../services/Connector";
-import { potholeEndpoints } from "../../services/Apis"; 
+import { potholeEndpoints, bidEndpoints } from "../../services/Apis";
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Button } from "../ui/button";
@@ -11,18 +11,40 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const placeholderImageUrl = "https://via.placeholder.com/400x300.png?text=No+Image+Available";
 
+// Helper function to determine status text and color
+const getStatusInfo = (pothole) => {
+    switch (pothole.status) {
+        case 'repaired':
+            return { text: 'Repaired', className: 'bg-green-100 text-green-700' };
+        case 'discarded':
+            return { text: 'Discarded', className: 'bg-red-100 text-red-700' };
+        case 'under_review':
+            return { text: 'Under Review', className: 'bg-yellow-100 text-yellow-700' };
+        case 'assigned':
+            return { text: 'Assigned', className: 'bg-yellow-100 text-yellow-700' };
+        case 'reported':
+            if (pothole.verify) {
+                return { text: 'Verified', className: 'bg-blue-100 text-blue-700' };
+            }
+            return { text: 'Unverified', className: 'bg-gray-200 text-gray-600' };
+        default:
+            return { text: 'Unknown', className: 'bg-gray-200 text-gray-600' };
+    }
+};
+
+
 const ApprovePothole = () => {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const markersRef = useRef([]);
 
-    // State management (removed bid-related states)
+    // State management
     const [potholes, setPotholes] = useState([]);
     const [selectedPothole, setSelectedPothole] = useState(null);
     const [potholeAddress, setPotholeAddress] = useState("");
     const [isAddressLoading, setIsAddressLoading] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    const [isUpdating, setIsUpdating] = useState(false); // State to disable buttons during API call
+    const [isUpdating, setIsUpdating] = useState(false);
 
     // Fetch all potholes from the API
     const fetchPotholes = async () => {
@@ -43,7 +65,7 @@ const ApprovePothole = () => {
 
     // Effect for fetching address when a pothole is selected
     useEffect(() => {
-        setCurrentImageIndex(0); // Reset image index when pothole changes
+        setCurrentImageIndex(0);
 
         const fetchAddress = async () => {
             if (!selectedPothole) {
@@ -106,17 +128,14 @@ const ApprovePothole = () => {
         markersRef.current = [];
         potholes.forEach(pothole => {
             let color;
-            if (pothole.status === 'discarded') {
-                color = '#EF4444'; // Red
-            } else if (pothole.status === 'under_review' || pothole.status === 'assigned') {
-                color = '#F59E0B'; // Amber/Yellow
-            } else if (pothole.status === 'repaired') {
-                color = '#10B981'; // Green
-            } else if (pothole.status === 'reported' && pothole.verify === true) {
-                color = '#3B82F6'; // Blue for verified
-            } else {
-                color = '#6B7280'; // Grey for reported but unverified
-            }
+            const statusInfo = getStatusInfo(pothole);
+
+            // Match marker color to status
+            if (statusInfo.text === 'Discarded') color = '#EF4444'; // Red
+            else if (statusInfo.text === 'Under Review' || statusInfo.text === 'Assigned') color = '#F59E0B'; // Amber
+            else if (statusInfo.text === 'Repaired') color = '#10B981'; // Green
+            else if (statusInfo.text === 'Verified') color = '#3B82F6'; // Blue
+            else color = '#6B7280'; // Grey for Unverified/Unknown
 
             const marker = new mapboxgl.Marker({ color }).setLngLat([pothole.longitude, pothole.latitude]).addTo(mapRef.current);
             marker.getElement().addEventListener('click', () => {
@@ -127,17 +146,15 @@ const ApprovePothole = () => {
     }, [potholes]);
 
 
-    // --- NEW: Handlers for Accept and Reject buttons ---
     const handleAcceptPothole = async (potholeId) => {
         setIsUpdating(true);
         const toastId = toast.loading("Verifying...");
         try {
-            // ✅ Pass an empty object {} as the request body
             await apiConnector("patch", `${potholeEndpoints.VERIFY_POTHOLE}/${potholeId}`, {});
-            
+
             toast.success("Pothole Verified!", { id: toastId });
-            setSelectedPothole(null); // Close the details card
-            await fetchPotholes(); // Refresh data to update map markers
+            setSelectedPothole(null);
+            await fetchPotholes();
         } catch (error) {
             console.error("Failed to verify pothole:", error);
             toast.error("Verification failed. Please try again.", { id: toastId });
@@ -150,12 +167,11 @@ const ApprovePothole = () => {
         setIsUpdating(true);
         const toastId = toast.loading("Discarding...");
         try {
-            // ✅ Pass an empty object {} as the request body
             await apiConnector("patch", `${potholeEndpoints.DISCARD_POTHOLE}/${potholeId}`, {});
 
             toast.success("Pothole Discarded!", { id: toastId });
-            setSelectedPothole(null); // Close the details card
-            await fetchPotholes(); // Refresh data to update map markers
+            setSelectedPothole(null);
+            await fetchPotholes();
         } catch (error) {
             console.error("Failed to discard pothole:", error);
             toast.error("Could not discard pothole. Please try again.", { id: toastId });
@@ -164,7 +180,36 @@ const ApprovePothole = () => {
         }
     };
 
-    // --- Carousel navigation functions ---
+    const handleAcceptBid = async (potholeId, bidId) => {
+        setIsUpdating(true);
+        const toastId = toast.loading("Accepting Bid...");
+
+        try {
+            const user = JSON.parse(localStorage.getItem("account"));
+            if (!user || !user.id) {
+                throw new Error("User not found. Please log in again.");
+            }
+            const approverId = user.id;
+
+            const response = await apiConnector(
+                "patch",
+                `${bidEndpoints.ACCEPT_BID}/${potholeId}`,
+                { bidId, approverId }
+            );
+
+            toast.success("Bid accepted successfully!", { id: toastId });
+            setSelectedPothole(null);
+            await fetchPotholes();
+
+        } catch (error) {
+            console.error("Failed to accept bid:", error);
+            const errorMessage = error.response?.data?.error || "Could not accept bid. Please try again.";
+            toast.error(errorMessage, { id: toastId });
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
     const handlePrevImage = () => {
         setCurrentImageIndex(prev => (prev > 0 ? prev - 1 : selectedPothole.images.length - 1));
     };
@@ -175,10 +220,8 @@ const ApprovePothole = () => {
 
     return (
         <div className="relative w-full h-full">
-            {/* Map Container */}
             <div ref={mapContainerRef} className="w-full h-full" />
 
-            {/* Floating Pothole Details Card */}
             {selectedPothole && (
                 <div className="absolute bottom-5 right-5 z-10 bg-white rounded-lg shadow-2xl p-4 w-full max-w-sm flex flex-col gap-3 animate-fade-in">
                     <div className="flex justify-between items-center">
@@ -197,18 +240,26 @@ const ApprovePothole = () => {
                             <span className="font-semibold">Description:</span>{" "}
                             {selectedPothole.description}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">
+
+                        {/* Conditionally render contractor info if status is 'under_review' */}
+                        {selectedPothole.status === 'under_review' && (
+                            <p className="mt-2 text-sm font-medium text-gray-800 bg-yellow-100 p-2 rounded-md">
+                                <span className="font-semibold">Assigned To:</span>{' '}
+                                {selectedPothole.bids?.find(bid => bid.status === 'accepted')?.users?.name || 'Contractor Loading...'}
+                            </p>
+                        )}
+
+                        <p className="text-xs text-gray-500 mt-2">
                             <span className="font-semibold">Address:</span>{" "}
                             {isAddressLoading ? "Fetching address..." : potholeAddress}
                         </p>
                     </div>
 
-                    {/* Image Carousel Display */}
                     <div className="relative w-full h-48 bg-gray-200 rounded-lg">
                         <img
                             src={
                                 selectedPothole.images && selectedPothole.images.length > 0
-                                    ? selectedPothole.images[currentImageIndex].image_url
+                                    ? selectedPothole.images[0].image_url
                                     : placeholderImageUrl
                             }
                             alt="Pothole"
@@ -245,25 +296,24 @@ const ApprovePothole = () => {
                                     : "bg-green-100 text-green-700"}`}>
                             {selectedPothole.severity} Severity
                         </span>
-                        <span className={`px-3 py-1 text-xs font-bold rounded-full
-                            ${selectedPothole.verify ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>
-                            {selectedPothole.verify ? 'Verified' : 'Unverified'}
+
+                        <span className={`px-3 py-1 text-xs font-bold rounded-full ${getStatusInfo(selectedPothole).className}`}>
+                            {getStatusInfo(selectedPothole).text}
                         </span>
                     </div>
 
-                    {/* --- NEW: Accept / Reject Buttons --- */}
-                    {/* Only show these buttons for reported potholes that are not yet verified or discarded */}
+                    {/* Case 1: Pothole is 'reported' and 'unverified' -> Show Accept/Reject */}
                     {selectedPothole.status === 'reported' && !selectedPothole.verify && (
                         <div className="border-t pt-3 flex justify-between space-x-3">
                             <Button
-                                className="w-[8vw] bg-red-500 hover:bg-red-600 text-white"
+                                className="w-[9vw] bg-red-500 hover:bg-red-600 text-white"
                                 onClick={() => handleRejectPothole(selectedPothole.id)}
                                 disabled={isUpdating}
                             >
                                 Reject
                             </Button>
                             <Button
-                                className="w-[8vw] bg-green-500 hover:bg-green-600 text-white"
+                                className="w-[9vw] bg-green-500 hover:bg-green-600 text-white"
                                 onClick={() => handleAcceptPothole(selectedPothole.id)}
                                 disabled={isUpdating}
                             >
@@ -271,10 +321,24 @@ const ApprovePothole = () => {
                             </Button>
                         </div>
                     )}
+
+                    {/* Case 2: Pothole is 'verified' and has a bid -> Show Accept Bid */}
+                    {selectedPothole.status === 'reported' && selectedPothole.verify && selectedPothole.current_bid && (
+                        <div className="border-t pt-3 flex flex-col gap-2">
+                            <div className="text-center text-sm text-gray-600">
+                                Lowest Bid: <span className="font-bold">₹{selectedPothole.current_bid.amount}</span> by <span className="font-bold">{selectedPothole.current_bid.users.name}</span>
+                            </div>
+                            <Button
+                                className="w-full bg-blue-500 hover:bg-blue-600 text-white"
+                                onClick={() => handleAcceptBid(selectedPothole.id, selectedPothole.current_bid.id)}
+                                disabled={isUpdating}
+                            >
+                                Accept Bid
+                            </Button>
+                        </div>
+                    )}
                 </div>
             )}
-            
-            {/* REMOVED: Bidding Modal is no longer needed */}
         </div>
     );
 };

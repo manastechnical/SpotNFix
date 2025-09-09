@@ -67,3 +67,64 @@ export const submitBid = async (req, res) => {
         });
     }
 };
+
+export const acceptBid = async (req, res) => {
+    // 1. Get IDs from the request
+    const { potholeId } = req.params;
+    const { bidId, approverId } = req.body;
+
+    // 2. Validate all required inputs
+    if (!potholeId || !bidId || !approverId) {
+        return res.status(400).json({ error: 'Pothole ID, Bid ID, and Approver ID are required.' });
+    }
+
+    try {
+        // NOTE: For production, these three operations should be combined into a single 
+        // database transaction using a Supabase RPC function to ensure data integrity.
+        // Here, we execute them sequentially.
+
+        // --- Step 1: Update the Pothole ---
+        // Change the pothole's status to 'under_review'.
+        const { error: potholeUpdateError } = await supabase
+            .from('potholes')
+            .update({ status: 'under_review' })
+            .eq('id', potholeId);
+
+        if (potholeUpdateError) {
+            throw potholeUpdateError;
+        }
+
+        // --- Step 2: Update the Bid ---
+        // Change the status of the accepted bid to 'accepted'.
+        const { error: bidUpdateError } = await supabase
+            .from('bids')
+            .update({ status: 'accepted' })
+            .eq('id', bidId);
+
+        if (bidUpdateError) {
+            throw bidUpdateError;
+        }
+
+        // --- Step 3: Create the Contract ---
+        // Insert a new row into the 'contracts' table.
+        const { error: contractInsertError } = await supabase
+            .from('contracts')
+            .insert({
+                bid_id: bidId,
+                approved_by: approverId,
+                status: 'ongoing' // Set the new contract's status
+            });
+
+        if (contractInsertError) {
+            throw contractInsertError;
+        }
+
+        // 4. Send a success response
+        res.status(200).json({ message: 'Bid accepted and contract created successfully.' });
+
+    } catch (error) {
+        // 5. Handle any errors that occur during the process
+        console.error('Error accepting bid and creating contract:', error);
+        res.status(500).json({ error: 'Internal server error while processing the bid.' });
+    }
+};
