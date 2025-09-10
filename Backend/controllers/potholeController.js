@@ -74,7 +74,6 @@ export const checkNearbyPotholes = async (req, res) => {
     }
 };
 
-// --- NEW: Function to handle the actual pothole reporting ---
 export const reportPothole = async (req, res) => {
     // Data from the form (already verified by middleware)
     const { lat, lng, description, severity, user_id } = req.body; // Assuming you'll send user_id from frontend
@@ -94,7 +93,7 @@ export const reportPothole = async (req, res) => {
         if (uploadError) {
             throw uploadError;
         }
-        
+
         // Get the public URL of the uploaded image
         const { data: { publicUrl } } = supabase.storage
             .from('pothole-images')
@@ -119,8 +118,20 @@ export const reportPothole = async (req, res) => {
         if (potholeError) {
             throw potholeError;
         }
-        
-        // --- 3. Link Image to the Pothole in the 'images' table ---
+
+        // --- NEW: 3. Update the pothole's location using the RPC function ---
+        const { error: rpcError } = await supabase.rpc('update_pothole_location', {
+            pothole_id_input: potholeData.id
+        });
+
+        if (rpcError) {
+            // It's better to log this error but not fail the whole request,
+            // as the main data is already saved.
+            console.error('Error updating pothole location:', rpcError);
+        }
+
+
+        // --- 4. Link Image to the Pothole in the 'images' table ---
         const { error: imageError } = await supabase
             .from('images')
             .insert([
@@ -139,6 +150,8 @@ export const reportPothole = async (req, res) => {
 
     } catch (error) {
         console.error("Error reporting pothole:", error);
+        // If something fails, you might want to clean up the uploaded image
+        // (code for cleanup not included here for simplicity)
         res.status(500).json({ error: 'Failed to report pothole.' });
     }
 };
@@ -155,6 +168,10 @@ export const getAllPotholes = async (req, res) => {
                 severity,
                 status,
                 verify,
+                images (
+                    image_url,
+                    type
+                ),
                 bids (
                     id,
                     amount,
@@ -167,7 +184,7 @@ export const getAllPotholes = async (req, res) => {
                     )
                 )
             `)
-            .order('id'); // Changed from ordering by bids.created_at
+            .order('id'); 
 
         if (error) throw error;
 

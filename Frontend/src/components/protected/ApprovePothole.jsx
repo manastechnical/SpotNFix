@@ -223,7 +223,11 @@ const ApprovePothole = () => {
             <div ref={mapContainerRef} className="w-full h-full" />
 
             {selectedPothole && (
-                <div className="absolute bottom-5 right-5 z-10 bg-white rounded-lg shadow-2xl p-4 w-full max-w-sm flex flex-col gap-3 animate-fade-in">
+                <div className="
+                    absolute bottom-0 left-0 right-0 z-10 bg-white 
+                    rounded-t-lg shadow-2xl p-4 flex flex-col gap-3 animate-fade-in
+                    md:bottom-5 md:right-5 md:left-auto md:rounded-lg md:w-full md:max-w-sm
+                ">
                     <div className="flex justify-between items-center">
                         <h3 className="text-lg font-bold">Pothole Details</h3>
                         <button
@@ -259,7 +263,7 @@ const ApprovePothole = () => {
                         <img
                             src={
                                 selectedPothole.images && selectedPothole.images.length > 0
-                                    ? selectedPothole.images[0].image_url
+                                    ? selectedPothole.images[currentImageIndex].image_url
                                     : placeholderImageUrl
                             }
                             alt="Pothole"
@@ -306,14 +310,14 @@ const ApprovePothole = () => {
                     {selectedPothole.status === 'reported' && !selectedPothole.verify && (
                         <div className="border-t pt-3 flex justify-between space-x-3">
                             <Button
-                                className="w-[9vw] bg-red-500 hover:bg-red-600 text-white"
+                                className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white"
                                 onClick={() => handleRejectPothole(selectedPothole.id)}
                                 disabled={isUpdating}
                             >
                                 Reject
                             </Button>
                             <Button
-                                className="w-[9vw] bg-green-500 hover:bg-green-600 text-white"
+                                className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white"
                                 onClick={() => handleAcceptPothole(selectedPothole.id)}
                                 disabled={isUpdating}
                             >
