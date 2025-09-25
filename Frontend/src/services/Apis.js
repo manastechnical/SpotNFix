@@ -21,16 +21,22 @@ export const bidEndpoints = {
 };
 
 export const adminEndpoints = {
-    ADMIN_LOGIN_API: BaseURL + 'api/admin/login',
-    GET_PENDING_VERIFICATIONS_API: BaseURL + 'api/admin/pending-verifications',
-    UPDATE_VERIFICATION_API: BaseURL + 'api/admin/update-verification',
+  ADMIN_LOGIN_API: BaseURL + 'api/admin/login',
+  GET_PENDING_VERIFICATIONS_API: BaseURL + 'api/admin/pending-verifications',
+  UPDATE_VERIFICATION_API: BaseURL + 'api/admin/update-verification',
 };
 
 export const potholeEndpoints = {
-    VERIFY_POTHOLE: BaseURL + 'api/potholes/verify',    
-    DISCARD_POTHOLE: BaseURL + 'api/potholes/discard', 
+  VERIFY_POTHOLE: BaseURL + 'api/potholes/verify',
+  DISCARD_POTHOLE: BaseURL + 'api/potholes/discard',
+  FINALIZE_REPAIR: "/api/potholes/finalize-repair",
+  REJECT_REPAIR: "/api/potholes/reject-repair",
 };
 
 export const mlEndpoints = {
   DETECT: MLBaseURL + 'detect',
+};
+
+export const contractorEndpoints = {
+  COMPLETE_WORK_API: (bidId) => BaseURL + `api/contractor/complete-work/${bidId}`,
 };

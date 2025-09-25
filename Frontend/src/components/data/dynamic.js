@@ -30,6 +30,12 @@ const getFeatures = () => {
       logoUsed: HomeIcon,
       route: '/contractor-bidding',
     });
+    features.push({
+      featureName: 'bidding-details',
+      displayName: 'Bidding Details',
+      logoUsed: HomeIcon,
+      route: '/bidding-details',
+    });
   }
   if (userData?.role === 'government') {
     features.push({

@@ -16,6 +16,7 @@ import GovernmentOfficialRegister from "./components/common/GovernmentOfficialRe
 import SuperAdminDashboard from './components/protected/Dashboard/SuperAdminDashboard';
 import AdminLogin from './components/common/AdminLogin';
 import ApprovePothole from './components/protected/ApprovePothole';
+import BiddingDetails from './components/protected/BiddingDetails';
 
 const RoutesConfig = () => {
     const isLoggedIn = useSelector(isUserLoggedIn);
@@ -56,7 +57,7 @@ const RoutesConfig = () => {
                     element={<VerifyEmail />}
                 />
                 <Route path="/register-contractor" className="transition-all scrollbar-hide" element={<ContractorRegister />} />
-        <Route path="/register-government-official" className="transition-all scrollbar-hide" element={<GovernmentOfficialRegister />} />
+                <Route path="/register-government-official" className="transition-all scrollbar-hide" element={<GovernmentOfficialRegister />} />
             </Routes>
         );
     } else {
@@ -73,6 +74,7 @@ const RoutesConfig = () => {
                         <Route path="/contractor-bidding" element={<ContractorBidding />} />
                         <Route path="/admin" element={<SuperAdminDashboard />} />
                         <Route path="/approve-pothole" element={<ApprovePothole />} />
+                        <Route path="/bidding-details" element={<BiddingDetails />} />
                     </Routes>
                 </div>
             </div>
