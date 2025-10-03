@@ -313,36 +313,77 @@ export const finalizePotholeRepair = async (req, res) => {
 };
 
 export const rejectPotholeRepair = async (req, res) => {
-    // In a real app, you would have authentication middleware here.
+    const { id } = req.params; // This is the contract ID from the URL
 
-    const { id } = req.params; // Get the pothole ID from the URL
-    console.log("Rejecting repair for pothole ID:", id);
     if (!id) {
-        return res.status(400).json({ error: 'Pothole ID is required.' });
+        return res.status(400).json({ error: 'Contract ID is required.' });
     }
 
     try {
-        // Call the 'reject_repair' PostgreSQL function via RPC.
-        // This single call handles updates to both the potholes and contracts tables.
-        const { data, error } = await supabase
+        // Step 1: Update contract and get the associated contractor_id
+        const { data: contractData, error: contractError } = await supabase
             .from('contracts')
             .update({ status: 'ongoing' })
             .eq('id', id)
-            .select()
+            .select(`*, bids(contractor_id)`)
             .single();
 
-        if (error) {
-            // "PGRST116" is the code for a function that returns 0 rows, meaning the pothole wasn't found.
-            if (error.code === 'PGRST116') {
-                return res.status(404).json({ error: 'Pothole not found or no completed contract to reject.' });
+        if (contractError) {
+            if (contractError.code === 'PGRST116') {
+                return res.status(404).json({ error: 'Contract not found.' });
             }
-            throw error; // Let the catch block handle other errors.
+            throw contractError;
         }
 
-        // Send the updated pothole data back as a success response.
+        const contractorId = contractData.bids?.contractor_id;
+        if (!contractorId) {
+            return res.status(404).json({ error: 'Could not find the contractor for this contract.' });
+        }
+
+        // Step 2: Manually increment the contractor's penalty count
+        
+        // 2a. First, READ the current penalty count
+        const { data: contractorDetails, error: fetchError } = await supabase
+            .from('contractor_details')
+            .select('no_of_penalty')
+            .eq('user_id', contractorId)
+            .single();
+
+        if (fetchError) {
+            console.error('Failed to fetch penalty count:', fetchError);
+            // Even if this fails, we should still proceed with rejecting the repair
+        }
+        
+        // 2b. Then, WRITE the new incremented value
+        const currentPenalties = contractorDetails?.no_of_penalty || 0;
+        const { error: updateError } = await supabase
+            .from('contractor_details')
+            .update({ no_of_penalty: currentPenalties + 1 })
+            .eq('user_id', contractorId);
+        
+        if (updateError) {
+            // Log this error but do not stop the process, as the main rejection is more critical
+            console.error('Failed to update penalty count:', updateError);
+        }
+
+        // Step 3: Fetch the contractor's email from the 'users' table
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', contractorId)
+            .single();
+
+        if (userError) {
+            console.error('Failed to fetch contractor email:', userError);
+        }
+
+        const contractorEmail = userData ? userData.email : null;
+
+        // Step 4: Send the final success response
         res.status(200).json({
-            message: 'Pothole repair rejected. Status has been reset.',
-            pothole: data,
+            message: 'Pothole repair rejected and contractor penalized.',
+            contract: contractData,
+            contractorEmail: contractorEmail
         });
 
     } catch (error) {
@@ -484,7 +525,7 @@ export const penalizeReopen = async (req, res) => {
             .from('contracts')
             .update({ status: 'penalized' }) // Status is now 'penalized'
             .eq('id', id)
-            .select()
+            .select(`*, bids(contractor_id)`)
             .single();
 
         if (error) {
@@ -494,6 +535,49 @@ export const penalizeReopen = async (req, res) => {
             }
             throw error; // Let the catch block handle other errors.
         }
+        const contractorId = data.bids?.contractor_id;
+        if (!contractorId) {
+            return res.status(404).json({ error: 'Could not find the contractor for this contract.' });
+        }
+
+        // Step 2: Manually increment the contractor's penalty count
+        
+        // 2a. First, READ the current penalty count
+        const { data: contractorDetails, error: fetchError } = await supabase
+            .from('contractor_details')
+            .select('no_of_penalty')
+            .eq('user_id', contractorId)
+            .single();
+
+        if (fetchError) {
+            console.error('Failed to fetch penalty count:', fetchError);
+            // Even if this fails, we should still proceed with rejecting the repair
+        }
+        
+        // 2b. Then, WRITE the new incremented value
+        const currentPenalties = contractorDetails?.no_of_penalty || 0;
+        const { error: updateError } = await supabase
+            .from('contractor_details')
+            .update({ no_of_penalty: currentPenalties + 1 })
+            .eq('user_id', contractorId);
+        
+        if (updateError) {
+            // Log this error but do not stop the process, as the main rejection is more critical
+            console.error('Failed to update penalty count:', updateError);
+        }
+
+        // Step 3: Fetch the contractor's email from the 'users' table
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', contractorId)
+            .single();
+
+        if (userError) {
+            console.error('Failed to fetch contractor email:', userError);
+        }
+
+        const contractorEmail = userData ? userData.email : null;
 
         // Send the updated contract data back as a success response.
         res.status(200).json({
@@ -512,7 +596,7 @@ export const reportDuplicatePotholeDiscarded = async (req, res) => {
     const { potholeId } = req.params;
     const imageFile = req.file;
     const { user_id } = req.body; // Assuming user_id is sent for naming the file
-    console.log("Re-reporting discarded pothole ID:", potholeId);
+    console.log("Re-reportingincrement_penalty discarded pothole ID:", potholeId);
     if (!imageFile) {
         return res.status(400).json({ error: 'Image file is required.' });
     }
