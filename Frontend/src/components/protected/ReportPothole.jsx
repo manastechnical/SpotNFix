@@ -66,7 +66,7 @@ const ReportPothole = () => {
     const [nearbyPotholes, setNearbyPotholes] = useState([]);
     const [, setIsChecking] = useState(false);
     const [showDuplicates, setShowDuplicates] = useState(false);
-    
+    const hasDuplicatesRef = useRef(false);
 
     // Get user ID from Redux state
     const { account } = useSelector((state) => state.dashboard);
@@ -209,6 +209,8 @@ const ReportPothole = () => {
     useEffect(() => {
         duplicateMarkersRef.current.forEach(marker => marker.remove());
         duplicateMarkersRef.current = [];
+        hasDuplicatesRef.current = nearbyPotholes.length > 0;
+        console.log('[FE] Nearby potholes:', nearbyPotholes, hasDuplicatesRef.current);
         if (showDuplicates && mapRef.current && nearbyPotholes.length > 0) {
             const newMarkers = nearbyPotholes.map(pothole => {
                 const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
@@ -272,51 +274,164 @@ const ReportPothole = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (mediaFiles.length === 0) {
-            toast.error("Please upload an image!");
-            return;
-        }
-        if (!userId) {
-            toast.error("You must be logged in to report a pothole!");
-            return;
-        }
-        setIsSubmitting(true);
-        setUploadProgress(0);
-        const formData = new FormData();
-        formData.append("description", description);
-        formData.append("lat", lat);
-        formData.append("lng", lng);
-        formData.append("severity", severity);
-        formData.append("user_id", userId);
-        formData.append("media", mediaFiles[0]);
-        try {
-            await axios.post("/api/potholes/report", formData, {
-                headers: { "Content-Type": "multipart/form-data" },
-                onUploadProgress: (progressEvent) => {
-                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                    setUploadProgress(percentCompleted);
-                },
-            });
-            toast.success("Pothole reported successfully!");
-            setMediaFiles([]);
-            setImgSrc('');
-            setDescription('');
-            setSeverity(null);
-            setNearbyPotholes([]);
-            setShowDuplicates(false);
-            setStep(1);
-        } catch (err) {
-            console.error(err); // Keep this for debugging
-
-            let errorMessage = "Submission failed. Please try again.";
-            // Check if the error response from the server has a specific message
-            if (err.response && err.response.data && err.response.data.error) {
-                errorMessage = err.response.data.error;
+        if (!hasDuplicatesRef.current) {                                    //new pothole being reported
+            if (mediaFiles.length === 0) {
+                toast.error("Please upload an image!");
+                return;
             }
-            toast.error(errorMessage);
+            if (!userId) {
+                toast.error("You must be logged in to report a pothole!");
+                return;
+            }
+            setIsSubmitting(true);
+            setUploadProgress(0);
+            const formData = new FormData();
+            formData.append("description", description);
+            formData.append("lat", lat);
+            formData.append("lng", lng);
+            formData.append("severity", severity);
+            formData.append("user_id", userId);
+            formData.append("media", mediaFiles[0]);
+            try {
+                await axios.post("/api/potholes/report", formData, {
+                    headers: { "Content-Type": "multipart/form-data" },
+                    onUploadProgress: (progressEvent) => {
+                        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        setUploadProgress(percentCompleted);
+                    },
+                });
+                toast.success("Pothole reported successfully!");
+                setMediaFiles([]);
+                setImgSrc('');
+                setDescription('');
+                setSeverity(null);
+                setNearbyPotholes([]);
+                setShowDuplicates(false);
+                setStep(1);
+            } catch (err) {
+                console.error(err); // Keep this for debugging
 
-        } finally {
-            setIsSubmitting(false);
+                let errorMessage = "Submission failed. Please try again.";
+                // Check if the error response from the server has a specific message
+                if (err.response && err.response.data && err.response.data.error) {
+                    errorMessage = err.response.data.error;
+                }
+                toast.error(errorMessage);
+
+            } finally {
+                setIsSubmitting(false);
+            }
+        } else {
+            // --- CASE 2: Re-reporting a DUPLICATE pothole ---
+
+            if (nearbyPotholes[0].status === 'fixed') {
+                // Logic to re-report a fixed pothole
+                if (mediaFiles.length === 0) {
+                    toast.error("A new image is required to re-report a fixed pothole.");
+                    return;
+                }
+                // Safely get user_id from localStorage
+                console.log('[FE] Stored user ID:', userId);
+                if (!userId) {
+                    toast.error("Could not find user ID. Please log in again.");
+                    return;
+                }
+
+                // Safely extract the contract ID
+                const contractId = nearbyPotholes[0].bids[0]?.contracts[0]?.id;
+                const potholeId = nearbyPotholes[0].id;
+
+                if (!contractId) {
+                    toast.error("Could not find a valid contract to penalize for this pothole.");
+                    return;
+                }
+
+                setIsSubmitting(true);
+                setUploadProgress(0);
+                const formData = new FormData();
+                formData.append("user_id", userId);
+                formData.append("media", mediaFiles[0]);
+                try {
+                    const apiUrl = `/api/potholes/${potholeId}/re-report/${contractId}`;
+                    await axios.post(apiUrl, formData, {
+                        headers: { "Content-Type": "multipart/form-data" },
+                        onUploadProgress: (progressEvent) => {
+                            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                            setUploadProgress(percentCompleted);
+                        },
+                    });
+                    toast.success("Pothole re-reported successfully!");
+                    // Reset form state
+                    setMediaFiles([]);
+                    setImgSrc('');
+                    setDescription('');
+                    setSeverity(null);
+                    setNearbyPotholes([]);
+                    setShowDuplicates(false);
+                    setStep(1);
+                } catch (err) {
+                    console.error(err);
+                    let errorMessage = "Failed to re-report pothole.";
+                    if (err.response?.data?.error) {
+                        errorMessage = err.response.data.error;
+                    }
+                    toast.error(errorMessage);
+                } finally {
+                    setIsSubmitting(false);
+                }
+
+            } else if (nearbyPotholes[0].status === 'discarded') {
+                // Logic to re-report a discarded pothole
+                if (mediaFiles.length === 0) {
+                    toast.error("A new image is required to re-report a discarded pothole.");
+                    return;
+                }
+
+                if (!userId) {
+                    toast.error("Could not find user ID. Please log in again.");
+                    return;
+                }
+
+                const potholeId = nearbyPotholes[0].id;
+
+                setIsSubmitting(true);
+                setUploadProgress(0);
+                const formData = new FormData();
+                formData.append("user_id", userId);
+                formData.append("media", mediaFiles[0]);
+                try {
+                    const apiUrl = `/api/potholes/${potholeId}/re-report-discarded/`;
+                    await axios.post(apiUrl, formData, {
+                        headers: { "Content-Type": "multipart/form-data" },
+                        onUploadProgress: (progressEvent) => {
+                            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                            setUploadProgress(percentCompleted);
+                        },
+                    });
+                    toast.success("Discarded pothole re-reported successfully!");
+
+                    // Reset form state
+                    setMediaFiles([]);
+                    setImgSrc('');
+                    setDescription('');
+                    setSeverity(null);
+                    setNearbyPotholes([]);
+                    setShowDuplicates(false);
+                    setStep(1);
+
+                } catch (err) {
+                    console.error(err);
+                    let errorMessage = "Failed to re-report pothole.";
+                    if (err.response?.data?.error) {
+                        errorMessage = err.response.data.error;
+                    }
+                    toast.error(errorMessage);
+                } finally {
+                    setIsSubmitting(false);
+                }
+            }else if(nearbyPotholes[0].status === 'reopened' || nearbyPotholes[0].status === 'reported' || nearbyPotholes[0].status === 'under_review'){
+                toast.error("This pothole is already being addressed. Cannot re-report at this time.");
+            }
         }
     };
 

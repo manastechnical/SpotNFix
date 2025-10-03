@@ -31,6 +31,9 @@ export const potholeEndpoints = {
   DISCARD_POTHOLE: BaseURL + 'api/potholes/discard',
   FINALIZE_REPAIR: "/api/potholes/finalize-repair",
   REJECT_REPAIR: "/api/potholes/reject-repair",
+  DISCARD_REOPEN: BaseURL + 'api/potholes/reopen/discard',
+  PENALIZE_REOPEN: BaseURL + 'api/potholes/reopen/penalize',
+  RE_REPORT_DISCARDED: (potholeId) => BaseURL + `api/potholes/${potholeId}/re-report-discarded/`
 };
 
 export const mlEndpoints = {

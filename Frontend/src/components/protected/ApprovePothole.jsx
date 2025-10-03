@@ -14,6 +14,8 @@ const placeholderImageUrl = "https://via.placeholder.com/400x300.png?text=No+Ima
 // Helper function to determine status text and color
 const getStatusInfo = (pothole) => {
     switch (pothole.status) {
+        case 'reopened':
+            return { text: 'Reopened', className: 'bg-orange-100 text-orange-700' };
         case 'fixed':
             return { text: 'Repaired', className: 'bg-green-100 text-green-700' };
         case 'discarded':
@@ -127,7 +129,8 @@ const ApprovePothole = () => {
             let color;
             const statusInfo = getStatusInfo(pothole);
 
-            if (statusInfo.text === 'Discarded') color = '#EF4444'; // Red
+            if (statusInfo.text === 'Reopened') color = '#F97316'; // Orange
+            else if (statusInfo.text === 'Discarded') color = '#EF4444'; // Red
             else if (statusInfo.text === 'Under Review' || statusInfo.text === 'Assigned') color = '#F59E0B'; // Amber
             else if (statusInfo.text === 'Repaired') color = '#10B981'; // Green
             else if (statusInfo.text === 'Verified') color = '#3B82F6'; // Blue
@@ -234,6 +237,40 @@ const ApprovePothole = () => {
         }
     };
 
+    const handleDiscardReopen = async (potholeId) => {
+        setIsUpdating(true);
+        const toastId = toast.loading("Discarding Reopen Claim...");
+        console.log("Discarding reopen claim for pothole ID:", potholeId);
+        try {
+            await apiConnector("patch", `${potholeEndpoints.DISCARD_REOPEN}/${potholeId}`, {});
+            toast.success("Reopen claim discarded and status set to fixed.", { id: toastId });
+            setSelectedPothole(null);
+            await fetchPotholes();
+        } catch (error) {
+            console.error("Failed to discard reopen claim:", error);
+            toast.error("Could not discard the claim. Please try again.", { id: toastId });
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
+    const handlePenalizeReopen = async (contractId) => {
+        setIsUpdating(true);
+        const toastId = toast.loading("Penalizing Contract...");
+        console.log("Penalizing contract ID:", contractId);
+        try {
+            await apiConnector("patch", `${potholeEndpoints.PENALIZE_REOPEN}/${contractId}`, {});
+            toast.success("Contract has been penalized.", { id: toastId });
+            setSelectedPothole(null);
+            await fetchPotholes();
+        } catch (error) {
+            console.error("Failed to penalize contract:", error);
+            toast.error("Could not penalize the contract. Please try again.", { id: toastId });
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
     // Image navigation handlers
     const handlePrevImage = () => setCurrentImageIndex(prev => (prev > 0 ? prev - 1 : selectedPothole.images.length - 1));
     const handleNextImage = () => setCurrentImageIndex(prev => (prev < selectedPothole.images.length - 1 ? prev + 1 : 0));
@@ -254,8 +291,10 @@ const ApprovePothole = () => {
                     <div>
                         <p className="text-sm text-gray-700"><span className="font-semibold">Description:</span> {selectedPothole.description}</p>
 
-                        {(selectedPothole.status === 'under_review' || selectedPothole.status === 'assigned') && (
-                            <p className="mt-2 text-sm font-medium text-gray-800 bg-yellow-100 p-2 rounded-md">
+                        {/* --- MODIFIED LINE --- */}
+                        {['under_review', 'assigned', 'reopened'].includes(selectedPothole.status) && (
+                            <p className={`mt-2 text-sm font-medium text-gray-800 p-2 rounded-md ${selectedPothole.status === 'reopened' ? 'bg-orange-100' : 'bg-yellow-100'
+                                }`}>
                                 <span className="font-semibold">Assigned To:</span>{' '}
                                 {selectedPothole.bids?.find(bid => bid.status === 'accepted')?.users?.name || 'Contractor Info Unavailable'}
                             </p>
@@ -287,6 +326,13 @@ const ApprovePothole = () => {
                         <div className="border-t pt-3 flex justify-between space-x-3">
                             <Button className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white" onClick={() => handleRejectPothole(selectedPothole.id)} disabled={isUpdating}>Reject</Button>
                             <Button className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" onClick={() => handleAcceptPothole(selectedPothole.id)} disabled={isUpdating}>Accept</Button>
+                        </div>
+                    )}
+
+                    {selectedPothole.status === 'reopened' && selectedPothole.current_bid?.contracts?.[0]?.status !== 'penalized' && (
+                        <div className="border-t pt-3 flex justify-between space-x-3">
+                            <Button className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white" onClick={() => handleDiscardReopen(selectedPothole.id)} disabled={isUpdating}>Reject</Button>
+                            <Button className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" onClick={() => handlePenalizeReopen(selectedPothole.current_bid.contracts[0].id)} disabled={isUpdating}>Accept</Button>
                         </div>
                     )}
 

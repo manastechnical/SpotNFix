@@ -10,18 +10,19 @@ export const checkNearbyPotholes = async (req, res) => {
     }
 
     try {
-        const { data, error } = await supabase.rpc('find_potholes_nearby', {
-            lat_input: parseFloat(lat),
-            lng_input: parseFloat(lng),
-            radius_meters: parseFloat(searchRadius)
-        });
-        if (error) {
-            throw error;
-        }
-
+        // const { data, error } = await supabase.rpc('find_potholes_nearby', {
+        //     lat_input: parseFloat(lat),
+        //     lng_input: parseFloat(lng),
+        //     radius_meters: parseFloat(searchRadius)
+        // });
+        // if (error) {
+        //     throw error;
+        // }
+        throw new Error("Simulated RPC failure for testing fallback");
         res.status(200).json(data);
     } catch (error) {
-        console.error('RPC failed for nearby potholes, attempting fallback:', error);
+        // console.error('RPC failed for nearby potholes, attempting fallback:', error);
+        console.error('RPC failed for nearby potholes, attempting fallback:');
 
         // Fallback: Bounding box + haversine filter in JS
         try {
@@ -42,7 +43,14 @@ export const checkNearbyPotholes = async (req, res) => {
 
             const { data: boxData, error: boxError } = await supabase
                 .from('potholes')
-                .select('id, latitude, longitude, description, severity, status')
+                .select(`id, latitude, longitude, description, severity, status, bids (
+                            id,
+                            contractor_id,
+                            contracts (
+                                id,
+                                status
+                            )
+                        )`)
                 .gte('latitude', minLat)
                 .lte('latitude', maxLat)
                 .gte('longitude', minLng)
@@ -271,7 +279,7 @@ export const discardPothole = async (req, res) => {
 
 export const finalizePotholeRepair = async (req, res) => {
 
-    const { id } = req.params; 
+    const { id } = req.params;
     if (!id) {
         return res.status(400).json({ error: 'Pothole ID is required.' });
     }
@@ -306,7 +314,7 @@ export const finalizePotholeRepair = async (req, res) => {
 
 export const rejectPotholeRepair = async (req, res) => {
     // In a real app, you would have authentication middleware here.
-    
+
     const { id } = req.params; // Get the pothole ID from the URL
     console.log("Rejecting repair for pothole ID:", id);
     if (!id) {
@@ -340,5 +348,251 @@ export const rejectPotholeRepair = async (req, res) => {
     } catch (error) {
         console.error('Error rejecting pothole repair:', error.message);
         res.status(500).json({ error: 'An unexpected error occurred on the server.' });
+    }
+};
+
+
+export const reportDuplicatePothole = async (req, res) => {
+    // 1. Get IDs from URL parameters
+    const { potholeId, contractId } = req.params;
+    const imageFile = req.file;
+    const { user_id } = req.body; // Assuming user_id is sent for naming the file
+
+    if (!imageFile) {
+        return res.status(400).json({ error: 'Image file is required.' });
+    }
+
+    try {
+        // --- 2. Find and delete the old image from Supabase Storage ---
+        const { data: imageData, error: findImageError } = await supabase
+            .from('images')
+            .select('image_url')
+            .eq('pothole_id', potholeId)
+            .single(); // Assuming one image per pothole for simplicity
+
+        if (findImageError) {
+            console.warn("Could not find a previous image to delete, proceeding with upload.", findImageError.message);
+        }
+
+        if (imageData) {
+            // Extract the file path from the full URL
+            const oldImageUrl = new URL(imageData.image_url);
+            const oldImageFilePath = oldImageUrl.pathname.split('/pothole-images/')[1];
+
+            if (oldImageFilePath) {
+                const { error: deleteError } = await supabase.storage
+                    .from('pothole-images')
+                    .remove([oldImageFilePath]);
+
+                if (deleteError) {
+                    console.error("Failed to delete old image, but proceeding:", deleteError);
+                    // Decide if this is a critical error. For now, we'll continue.
+                }
+            }
+        }
+
+        // --- 3. Upload the new image to Supabase Storage ---
+        const fileName = `${user_id || 'anonymous'}/${uuidv4()}-${imageFile.originalname}`;
+        const { error: uploadError } = await supabase.storage
+            .from('pothole-images')
+            .upload(fileName, imageFile.buffer, {
+                contentType: imageFile.mimetype,
+                cacheControl: '3600',
+                upsert: false, // Don't upsert, as it's a new file
+            });
+
+        console.log(fileName);
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('pothole-images')
+            .getPublicUrl(fileName);
+
+
+        // --- 4. Update the 'images' table with the new URL ---
+        // This will replace the old image record if one exists, or add a new one.
+        const { error: imageDbError } = await supabase
+            .from('images')
+            .update({ image_url: publicUrl })
+            .eq('pothole_id', potholeId);                   //wants to fix this since it only updates if there is already an image
+
+        if (imageDbError) throw imageDbError;
+
+
+        // --- 5. Update pothole status to 'reopened' ---
+        const { data: potholeData, error: potholeError } = await supabase
+            .from('potholes')
+            .update({ status: 'reopened' })
+            .eq('id', potholeId)
+            .select()
+            .single();
+
+        if (potholeError) throw potholeError;
+
+
+
+        res.status(200).json({
+            message: "Pothole re-reported successfully and contract penalized.",
+            data: potholeData
+        });
+
+    } catch (error) {
+        console.error("Error reporting duplicate pothole:", error);
+        res.status(500).json({ error: 'Failed to report duplicate pothole.' });
+    }
+};
+
+export const discardReopen = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const { data, error } = await supabase
+            .from('potholes')
+            .update({ status: 'fixed' }) // Status is now 'fixed'
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({ error: 'Pothole not found.' });
+            }
+            throw error;
+        }
+
+        // Updated success message
+        res.status(200).json({ message: 'Reopened claim discarded and pothole status set to fixed.', data });
+
+    } catch (error) {
+        console.error('Error in discardReopen:', error); // Updated log message
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+export const penalizeReopen = async (req, res) => {
+    // In a real app, you would have authentication middleware here.
+
+    const { id } = req.params; // Get the contract ID from the URL
+    console.log("Penalizing contract ID:", id);
+    if (!id) {
+        return res.status(400).json({ error: 'Contract ID is required.' });
+    }
+
+    try {
+        // Find the contract by its ID and update its status to 'penalized'.
+        const { data, error } = await supabase
+            .from('contracts')
+            .update({ status: 'penalized' }) // Status is now 'penalized'
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) {
+            // "PGRST116" is the code for a query that returns 0 rows, meaning the contract wasn't found.
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({ error: 'Contract not found.' });
+            }
+            throw error; // Let the catch block handle other errors.
+        }
+
+        // Send the updated contract data back as a success response.
+        res.status(200).json({
+            message: 'Contract has been penalized.',
+            contract: data,
+        });
+
+    } catch (error) {
+        console.error('Error penalizing contract:', error.message);
+        res.status(500).json({ error: 'An unexpected error occurred on the server.' });
+    }
+};
+
+export const reportDuplicatePotholeDiscarded = async (req, res) => {
+    // 1. Get IDs from URL parameters
+    const { potholeId } = req.params;
+    const imageFile = req.file;
+    const { user_id } = req.body; // Assuming user_id is sent for naming the file
+    console.log("Re-reporting discarded pothole ID:", potholeId);
+    if (!imageFile) {
+        return res.status(400).json({ error: 'Image file is required.' });
+    }
+
+    try {
+        // --- 2. Find and delete the old image from Supabase Storage ---
+        const { data: imageData, error: findImageError } = await supabase
+            .from('images')
+            .select('image_url')
+            .eq('pothole_id', potholeId)
+            .single(); // Assuming one image per pothole for simplicity
+
+        if (findImageError) {
+            console.warn("Could not find a previous image to delete, proceeding with upload.", findImageError.message);
+        }
+
+        if (imageData) {
+            // Extract the file path from the full URL
+            const oldImageUrl = new URL(imageData.image_url);
+            const oldImageFilePath = oldImageUrl.pathname.split('/pothole-images/')[1];
+
+            if (oldImageFilePath) {
+                const { error: deleteError } = await supabase.storage
+                    .from('pothole-images')
+                    .remove([oldImageFilePath]);
+
+                if (deleteError) {
+                    console.error("Failed to delete old image, but proceeding:", deleteError);
+                    // Decide if this is a critical error. For now, we'll continue.
+                }
+            }
+        }
+
+        // --- 3. Upload the new image to Supabase Storage ---
+        const fileName = `${user_id || 'anonymous'}/${uuidv4()}-${imageFile.originalname}`;
+        const { error: uploadError } = await supabase.storage
+            .from('pothole-images')
+            .upload(fileName, imageFile.buffer, {
+                contentType: imageFile.mimetype,
+                cacheControl: '3600',
+                upsert: false, // Don't upsert, as it's a new file
+            });
+
+        console.log(fileName);
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('pothole-images')
+            .getPublicUrl(fileName);
+
+
+        // --- 4. Update the 'images' table with the new URL ---
+        // This will replace the old image record if one exists, or add a new one.
+        const { error: imageDbError } = await supabase
+            .from('images')
+            .update({ image_url: publicUrl })
+            .eq('pothole_id', potholeId);                   //wants to fix this since it only updates if there is already an image
+
+        if (imageDbError) throw imageDbError;
+
+
+        // --- 5. Update pothole status to 'reopened' ---
+        const { data: potholeData, error: potholeError } = await supabase
+            .from('potholes')
+            .update({ status: 'reported' })
+            .eq('id', potholeId)
+            .select()
+            .single();
+
+        if (potholeError) throw potholeError;
+
+
+
+        res.status(200).json({
+            message: "Pothole re-reported successfully and contract penalized.",
+            data: potholeData
+        });
+
+    } catch (error) {
+        console.error("Error reporting duplicate pothole:", error);
+        res.status(500).json({ error: 'Failed to report duplicate pothole.' });
     }
 };

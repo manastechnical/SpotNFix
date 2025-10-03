@@ -1,45 +1,57 @@
 import supabase from '../supabaseClient.js';
 
 export const potholeFixed = async (req, res) => {
-    // 1. Get the contract ID from the request parameters
+    // 1. Get IDs from the request
     const { bidId } = req.params;
-    console.log("Received request to complete work for contract ID:", bidId);
-    // A simple validation to ensure the ID is present
-    if (!bidId) {
-        return res.status(400).json({ error: 'Contract ID is required.' });
+    const { potholeId } = req.body; // Get potholeId from the request body
+
+    // 2. Validate inputs
+    if (!bidId || !potholeId) {
+        return res.status(400).json({ error: 'Bid ID and Pothole ID are required.' });
     }
 
     try {
-        // 2. Update the specific contract in the Supabase 'contracts' table
-        const { data, error } = await supabase
+        // 3. Update the contract status to 'completed'
+        const { data: contractData, error: contractError } = await supabase
             .from('contracts')
             .update({
-                status: 'completed',                      // Set status to 'completed'
-                actual_end_date: new Date().toISOString(), // Set the end date to now
+                status: 'completed',
+                actual_end_date: new Date().toISOString(),
             })
-            .eq('bid_id', bidId) // Find the row where the 'id' matches bidId
-            .select()             // Return the updated row data
+            .eq('bid_id', bidId)
+            .select()
+            .single(); // Use single() as we expect one record per bid
 
-        // 3. Handle any potential errors from the database
-        if (error) {
-            console.error('Supabase error:', error.message);
-            throw error; // This will be caught by the outer catch block
+        if (contractError) {
+            if (contractError.code === 'PGRST116') {
+                return res.status(404).json({ error: 'Contract not found for the given bid ID.' });
+            }
+            throw contractError;
+        }
+
+        // 4. Update the pothole status to 'under_review'
+        const { data: potholeData, error: potholeError } = await supabase
+            .from('potholes')
+            .update({ status: 'under_review' })
+            .eq('id', potholeId)
+            .select()
+            .single();
+
+        if (potholeError) {
+            // This is a critical error. In a real app, you might roll back the contract update.
+            return res.status(500).json({ error: 'Contract updated, but failed to update pothole status.' });
         }
         
-        // 4. Check if a row was actually updated (if not, the ID was not found)
-        if (!data || data.length === 0) {
-            return res.status(404).json({ error: 'Contract not found.' });
-        }
-
-        // 5. If successful, send a success response with the updated data
-        console.log(`Contract ${bidId} was successfully marked as completed.`);
+        // 5. Send a success response with all updated data
         return res.status(200).json({
-            message: 'Work successfully marked as complete.',
-            data: data[0] // The updated contract record
+            message: 'Work marked as complete and is now under review.',
+            contract: contractData,
+            pothole: potholeData
         });
 
     } catch (error) {
         // 6. Handle any other unexpected errors
+        console.error("Error in potholeFixed controller:", error.message);
         return res.status(500).json({ 
             error: 'An internal server error occurred.',
             details: error.message 

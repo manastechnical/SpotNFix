@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 // Import both controller functions
-import { checkNearbyPotholes, getAllPotholes, reportPothole,verifyPothole,discardPothole, finalizePotholeRepair, rejectPotholeRepair } from '../controllers/potholeController.js'; 
+import { checkNearbyPotholes, getAllPotholes, reportPothole,verifyPothole,discardPothole, finalizePotholeRepair, rejectPotholeRepair,reportDuplicatePothole,discardReopen,penalizeReopen,reportDuplicatePotholeDiscarded } from '../controllers/potholeController.js'; 
 import { verifyImage } from '../middleware/verifyImage.js';
 
 const router = express.Router();
@@ -25,5 +25,19 @@ router.patch('/verify/:id', verifyPothole);
 router.patch('/discard/:id', discardPothole);
 router.patch('/finalize-repair/:id', finalizePotholeRepair);
 router.patch('/reject-repair/:id', rejectPotholeRepair); // New route for rejecting repair
+
+router.post(
+    '/:potholeId/re-report/:contractId',
+    upload.single('media'), // Multer middleware to process the image
+    reportDuplicatePothole
+);
+
+router.patch('/reopen/discard/:id', discardReopen);
+router.patch('/reopen/penalize/:id', penalizeReopen);
+router.post(
+    '/:potholeId/re-report-discarded/',
+    upload.single('media'), // Multer middleware to process the image
+    reportDuplicatePotholeDiscarded
+);
 
 export default router;
