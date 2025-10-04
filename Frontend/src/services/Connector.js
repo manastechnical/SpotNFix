@@ -12,6 +12,7 @@ export const apiConnector = (method, url, bodyData, headers, params) => {
   console.log('API Connector: ', method, url, bodyData, headers, params);
   const accountData = JSON.parse(localStorage.getItem('account'));
     const adminToken = localStorage.getItem('adminToken');
+  console.log(accountData)
 
   let token;
 
@@ -29,7 +30,7 @@ export const apiConnector = (method, url, bodyData, headers, params) => {
   return axiosInstance({
     method,
     url,
-    data: bodyData || null,
+    data: bodyData,
     headers,
     params: params || null,
   });

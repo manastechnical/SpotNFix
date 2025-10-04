@@ -8,8 +8,14 @@ import {
   setAccountAfterRegister,
   setDFeature,
 } from '../../app/DashboardSlice';
-import { authEndpoints } from '../Apis';
+import { authEndpoints, communityEndpoints } from '../Apis';
 const { LOGIN_API, REGISTER, VALIDATE_GMAIL, GOOGLE_SIGN_IN, REGISTER_CONTRACTOR, REGISTER_GOVERNMENT_OFFICIAL } = authEndpoints;
+const { GET_COMMUNITIES_API,
+    CREATE_COMMUNITY_API,
+    GET_COMMUNITY_BY_ID_API,
+    JOIN_COMMUNITY_API,
+    LEAVE_COMMUNITY_API,
+    CREATE_EVENT_API, } = communityEndpoints;
 
 export function login(email_id,role,password, navigate) {
   return async (dispatch) => {
@@ -242,3 +248,84 @@ export function registerGovernmentOfficial(formData, navigate) {
         toast.dismiss(loadingToast);
     };
 }
+
+export const fetchAllCommunities = () => {
+  return apiConnector('GET', GET_COMMUNITIES_API);
+};
+
+export const createNewCommunity = (communityData) => {
+  // The second argument is the body, third is headers (if needed), fourth is params (if needed)
+  return apiConnector('POST', CREATE_COMMUNITY_API, communityData);
+};
+
+export const fetchCommunityById = (id) => {
+    return apiConnector('GET', GET_COMMUNITY_BY_ID_API + id);
+};
+
+export const joinCommunityById = (id, userId) => {
+    return apiConnector('POST', JOIN_COMMUNITY_API(id), { userId });
+};
+
+export const leaveCommunityById = (id, userId) => {
+    return apiConnector('POST', LEAVE_COMMUNITY_API(id), { userId });
+};
+
+export const createNewEvent = (id, eventData) => {
+    return apiConnector('POST', CREATE_EVENT_API(id), eventData);
+};
+
+export const removeCommunityMember = async (communityId, memberId) => {
+    const toastId = toast.loading("Removing member...");
+    try {
+        const response = await apiConnector('DELETE', communityEndpoints.REMOVE_MEMBER_API(communityId, memberId));
+        toast.success("Member removed successfully!");
+        return response;
+    } catch (error) {
+        toast.error(error.response?.data?.message || "Failed to remove member.");
+        throw error;
+    } finally {
+        toast.dismiss(toastId);
+    }
+};
+
+export const updateCommunityMemberRole = async (communityId, memberId, role) => {
+    const toastId = toast.loading("Updating role...");
+    try {
+        const response = await apiConnector('PUT', communityEndpoints.UPDATE_MEMBER_ROLE_API(communityId, memberId), { role });
+        toast.success("Role updated successfully!");
+        return response;
+    } catch (error) {
+        toast.error(error.response?.data?.message || "Failed to update role.");
+        throw error;
+    } finally {
+        toast.dismiss(toastId);
+    }
+};
+
+export const updateCommunityDetails = async (id, details) => {
+    const toastId = toast.loading("Updating...");
+    try {
+        const response = await apiConnector('PUT', communityEndpoints.UPDATE_COMMUNITY_API(id), details);
+        toast.success("Community details saved!");
+        return response;
+    } catch (error) {
+        toast.error(error.response?.data?.message || "Update failed.");
+        throw error;
+    } finally {
+        toast.dismiss(toastId);
+    }
+};
+
+export const deleteCommunityById = async (id) => {
+    const toastId = toast.loading("Deleting community...");
+    try {
+        const response = await apiConnector('DELETE', communityEndpoints.DELETE_COMMUNITY_API(id));
+        toast.success("Community deleted.");
+        return response;
+    } catch (error) {
+        toast.error(error.response?.data?.message || "Deletion failed.");
+        throw error;
+    } finally {
+        toast.dismiss(toastId);
+    }
+};
