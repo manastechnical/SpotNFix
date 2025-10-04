@@ -329,3 +329,31 @@ export const deleteCommunityById = async (id) => {
         toast.dismiss(toastId);
     }
 };
+
+export const fetchCommunityEvents = async (communityId, token) => {
+    return apiConnector("GET", communityEndpoints.GET_EVENTS_API(communityId), undefined, {
+        'Authorization': `Bearer ${token}`
+    });
+};
+
+export const createCommunityEvent = async (communityId, eventData, token) => {
+    return apiConnector("POST", communityEndpoints.CREATE_EVENT_API(communityId), eventData, {
+        'Authorization': `Bearer ${token}`
+    });
+};
+
+export const updateCommunityEvent = async (eventId, eventData, token) => {
+    return apiConnector("PUT", communityEndpoints.UPDATE_EVENT_API(eventId), eventData, {
+        'Authorization': `Bearer ${token}`
+    });
+};
+
+export const deleteCommunityEvent = async (eventId, token) => {
+    return apiConnector("DELETE", communityEndpoints.DELETE_EVENT_API(eventId), undefined, {
+        'Authorization': `Bearer ${token}`
+    });
+};
+
+export const rsvpToEvent = async (eventId, data) => {
+    return apiConnector("POST", communityEndpoints.RSVP_EVENT_API(eventId), data);
+};

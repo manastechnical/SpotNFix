@@ -55,4 +55,9 @@ export const communityEndpoints = {
   UPDATE_MEMBER_ROLE_API: (communityId, memberId) => BaseURL + `api/communities/${communityId}/members/${memberId}/role`,
    UPDATE_COMMUNITY_API: (id) => BaseURL + `api/communities/${id}`,
   DELETE_COMMUNITY_API: (id) => BaseURL + `api/communities/${id}`,
+  GET_EVENTS_API: (communityId) => BaseURL + `api/communities/${communityId}/events`,
+  CREATE_EVENT_API: (communityId) => BaseURL + `api/communities/${communityId}/events`,
+  UPDATE_EVENT_API: (eventId) => BaseURL + `api/communities/events/${eventId}`,
+  DELETE_EVENT_API: (eventId) => BaseURL + `api/communities/events/${eventId}`,
+  RSVP_EVENT_API: (eventId) => BaseURL + `api/communities/events/${eventId}/rsvp`,
 };

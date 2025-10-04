@@ -269,18 +269,123 @@ export const createEvent = async (req, res) => {
 
 export const getCommunityEvents = async (req, res) => {
     const { communityId } = req.params;
-
     try {
         const { data: events, error } = await supabase
-            .from("events")
-            .select("*")
-            .eq("community_id", communityId);
+            .from('events')
+            .select(`
+                *,
+                attendees:event_attendees(user_id)
+            `)
+            .eq('community_id', communityId)
+            .order('start_time', { ascending: true });
 
         if (error) throw error;
 
-        res.status(200).json({ success: true, data: events });
+        const formattedEvents = events.map(event => ({
+            ...event,
+            attendees: event.attendees.map(a => a.user_id)
+        }));
+
+        res.status(200).json({ success: true, data: formattedEvents });
     } catch (error) {
-        console.error("Error getting community events:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+        res.status(500).json({ success: false, error: error.message });
     }
-}
+};
+
+export const createCommunityEvent = async (req, res) => {
+    const { communityId } = req.params;
+    // Note: created_by is now in the body, not req.user
+    const { title, description, location, start_time, end_time, created_by } = req.body;
+
+    if (!title || !start_time || !created_by) {
+        return res.status(400).json({ message: "Missing required fields: title, start_time, created_by" });
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('events')
+            .insert([{
+                community_id: communityId,
+                created_by: created_by, // Using created_by from body
+                title,
+                description,
+                location,
+                start_time,
+                end_time,
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.status(201).json({ success: true, message: "Event created successfully", data });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+export const updateCommunityEvent = async (req, res) => {
+    const { eventId } = req.params;
+    const { title, description, location, start_time, end_time } = req.body;
+
+    try {
+        const { data, error } = await supabase
+            .from('events')
+            .update({ title, description, location, start_time, end_time })
+            .eq('id', eventId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.status(200).json({ success: true, message: "Event updated successfully", data });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+export const deleteCommunityEvent = async (req, res) => {
+    const { eventId } = req.params;
+
+    try {
+        const { error } = await supabase
+            .from('events')
+            .delete()
+            .eq('id', eventId);
+
+        if (error) throw error;
+        res.status(200).json({ success: true, message: "Event deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+export const rsvpToEvent = async (req, res) => {
+    const { eventId } = req.params;
+    const { userId, rsvp } = req.body; // Expecting userId and a boolean rsvp status
+
+    if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+    }
+    
+    try {
+        if (rsvp) {
+            const { error } = await supabase
+                .from('event_attendees')
+                .insert([{ event_id: eventId, user_id: userId }]);
+            if (error) throw error;
+            res.status(200).json({ success: true, message: "RSVP successful" });
+        } else {
+            const { error } = await supabase
+                .from('event_attendees')
+                .delete()
+                .eq('event_id', eventId)
+                .eq('user_id', userId);
+            if (error) throw error;
+            res.status(200).json({ success: true, message: "RSVP removed" });
+        }
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(409).json({ error: 'Already RSVPed to this event.' });
+        }
+        res.status(500).json({ success: false, error: error.message });
+    }
+};

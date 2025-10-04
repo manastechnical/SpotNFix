@@ -97,7 +97,7 @@ const Communities = () => {
                         className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors shrink-0"
                     >
                         <FaPlus />
-                        <span>Create New</span>
+                        <span className='hidden sm:block'>Create New</span>
                     </button>
                 </div>
             </div>

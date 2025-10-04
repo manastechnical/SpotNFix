@@ -16,11 +16,7 @@ export const apiConnector = (method, url, bodyData, headers, params) => {
 
   let token;
 
-  if (accountData) {
-    token = accountData.token;
-  } else if (adminToken) {
-    token = adminToken;
-  }
+  token=adminToken;
 
   headers = headers || {};
   if (token) {
@@ -32,6 +28,6 @@ export const apiConnector = (method, url, bodyData, headers, params) => {
     url,
     data: bodyData,
     headers,
-    params: params || null,
+    params: params,
   });
 };
