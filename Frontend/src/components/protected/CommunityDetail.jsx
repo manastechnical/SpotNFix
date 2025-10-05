@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import toast from 'react-hot-toast';
+import {toast} from 'react-hot-toast';
 import { selectAccount } from '../../app/DashboardSlice';
 import { FaArrowLeft, FaUsers, FaCalendarAlt, FaCrown, FaUserShield, FaUser, FaEllipsisV, FaTrash, FaPlus, FaCog, FaSave, FaTimes, FaEdit, FaShieldAlt, FaCalendarPlus, FaMapMarkerAlt, FaClock, FaUserFriends, FaCheckCircle } from 'react-icons/fa';
 import {
@@ -36,9 +36,6 @@ const formatEventDate = (dateString) => {
 };
 
 
-// =================================================================================
-// --- EVENT MODAL COMPONENT (FOR CREATING & EDITING EVENTS) ---
-// =================================================================================
 const EventModal = ({ isOpen, onClose, onSave, event }) => {
     const [eventData, setEventData] = useState({
         title: '',

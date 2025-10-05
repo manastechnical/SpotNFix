@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
-import toast from 'react-hot-toast';
+import {toast} from 'react-hot-toast';
 import { selectAccount } from '../../app/DashboardSlice';
 import { FaPlus, FaSearch, FaUsers } from 'react-icons/fa';
 import { fetchAllCommunities, createNewCommunity } from '../../services/repository/userRepo'; 

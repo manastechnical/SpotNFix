@@ -6,7 +6,7 @@ import { selectAccount } from '../../app/DashboardSlice';
 import { authEmail } from '../../services/repository/userRepo';
 import { useDispatch, useSelector } from 'react-redux';
 import { ArrowLeft, Timer } from 'lucide-react';
-import toast from 'react-hot-toast';
+import {toast} from 'react-hot-toast';
 import axios from 'axios';
 
 const VerifyEmail = () => {

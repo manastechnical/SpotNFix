@@ -1,5 +1,9 @@
 import supabase from '../supabaseClient.js';
 import { v4 as uuidv4 } from 'uuid';
+import { sendPotholeStatusEmail } from '../utils/sendPotholeStatusEmail.js';
+import { sendPotholeFixedEmail } from '../utils/sendPotholeFixedEmail.js';
+import { sendRepairRejectedEmail } from '../utils/sendRepairRejectedEmail.js';
+import { sendPotholeReappearedEmail } from '../utils/sendPotholeReappearedEmail.js';
 
 export const checkNearbyPotholes = async (req, res) => {
     const { lat, lng, radius } = req.query;
@@ -232,7 +236,13 @@ export const verifyPothole = async (req, res) => {
             .from('potholes')
             .update({ verify: true })
             .eq('id', id)
-            .select()
+            .select(`
+                *,
+                users (
+                    id,
+                    email
+                )
+            `)
             .single(); // .single() to return the updated record
 
         if (error) {
@@ -242,6 +252,10 @@ export const verifyPothole = async (req, res) => {
             throw error;
         }
 
+        if (data.users?.email) {
+            console.log("email", data.users.email);
+            await sendPotholeStatusEmail(data.users.email, 'verified');
+        }
         res.status(200).json({ message: 'Pothole verified successfully!', data });
 
     } catch (error) {
@@ -259,7 +273,13 @@ export const discardPothole = async (req, res) => {
             .from('potholes')
             .update({ status: 'discarded' })
             .eq('id', id)
-            .select()
+            .select(`
+                *,
+                users (
+                    id,
+                    email
+                )
+            `)
             .single();
 
         if (error) {
@@ -269,6 +289,10 @@ export const discardPothole = async (req, res) => {
             throw error;
         }
 
+        if (data.users?.email) {
+            console.log("email", data.users.email);
+            await sendPotholeStatusEmail(data.users.email, 'rejected');
+        }
         res.status(200).json({ message: 'Pothole discarded successfully!', data });
 
     } catch (error) {
@@ -289,10 +313,21 @@ export const finalizePotholeRepair = async (req, res) => {
             .from('potholes')
             .update({ status: 'fixed' })
             .eq('id', id)
-            .select()
+            .select(`*,
+                users (
+                    id,
+                    email
+                )`)
             .single();
 
         // If the RPC call returns an error (e.g., pothole not found)
+        if (data?.users?.email) {
+            console.log("email", data.users.email);
+            await sendPotholeFixedEmail(data.users.email, data.description);
+
+        } else {
+            console.warn("Could not send 'pothole fixed' email: User email not found.");
+        }
         if (error) {
             if (error.code === 'PGRST116') {
                 return res.status(404).json({ error: 'Pothole not found.' });
@@ -325,7 +360,10 @@ export const rejectPotholeRepair = async (req, res) => {
             .from('contracts')
             .update({ status: 'ongoing' })
             .eq('id', id)
-            .select(`*, bids(contractor_id)`)
+            .select(`*, bids(contractor_id,            
+                users (
+                email
+            ))`)
             .single();
 
         if (contractError) {
@@ -335,13 +373,24 @@ export const rejectPotholeRepair = async (req, res) => {
             throw contractError;
         }
 
+        if (contractData?.bids?.users?.email) {
+            console.log("email", contractData.bids.users.email);
+
+            const contractorEmail = contractData.bids.users.email;
+            const potholeDescription = "";
+
+            await sendRepairRejectedEmail(contractorEmail, potholeDescription);
+
+        } else {
+            console.warn("Could not send 'repair rejected' email: Contractor email not found.");
+        }
         const contractorId = contractData.bids?.contractor_id;
         if (!contractorId) {
             return res.status(404).json({ error: 'Could not find the contractor for this contract.' });
         }
 
         // Step 2: Manually increment the contractor's penalty count
-        
+
         // 2a. First, READ the current penalty count
         const { data: contractorDetails, error: fetchError } = await supabase
             .from('contractor_details')
@@ -353,14 +402,14 @@ export const rejectPotholeRepair = async (req, res) => {
             console.error('Failed to fetch penalty count:', fetchError);
             // Even if this fails, we should still proceed with rejecting the repair
         }
-        
+
         // 2b. Then, WRITE the new incremented value
         const currentPenalties = contractorDetails?.no_of_penalty || 0;
         const { error: updateError } = await supabase
             .from('contractor_details')
             .update({ no_of_penalty: currentPenalties + 1 })
             .eq('user_id', contractorId);
-        
+
         if (updateError) {
             // Log this error but do not stop the process, as the main rejection is more critical
             console.error('Failed to update penalty count:', updateError);
@@ -525,8 +574,24 @@ export const penalizeReopen = async (req, res) => {
             .from('contracts')
             .update({ status: 'penalized' }) // Status is now 'penalized'
             .eq('id', id)
-            .select(`*, bids(contractor_id)`)
+            .select(`*, bids(contractor_id,            
+                users (
+                email
+            ))`)
             .single();
+
+        if (data?.bids?.users?.email) {
+
+            const contractorEmail = data.bids.users.email;
+            const potholeDescription = "";
+
+            console.log("Found contractor email:", contractorEmail);
+
+            await sendPotholeReappearedEmail(contractorEmail, potholeDescription);
+
+        } else {
+            console.warn("Could not send 'pothole reappeared' email: Required data (email or description) is missing.");
+        }
 
         if (error) {
             // "PGRST116" is the code for a query that returns 0 rows, meaning the contract wasn't found.
@@ -541,7 +606,7 @@ export const penalizeReopen = async (req, res) => {
         }
 
         // Step 2: Manually increment the contractor's penalty count
-        
+
         // 2a. First, READ the current penalty count
         const { data: contractorDetails, error: fetchError } = await supabase
             .from('contractor_details')
@@ -553,14 +618,14 @@ export const penalizeReopen = async (req, res) => {
             console.error('Failed to fetch penalty count:', fetchError);
             // Even if this fails, we should still proceed with rejecting the repair
         }
-        
+
         // 2b. Then, WRITE the new incremented value
         const currentPenalties = contractorDetails?.no_of_penalty || 0;
         const { error: updateError } = await supabase
             .from('contractor_details')
             .update({ no_of_penalty: currentPenalties + 1 })
             .eq('user_id', contractorId);
-        
+
         if (updateError) {
             // Log this error but do not stop the process, as the main rejection is more critical
             console.error('Failed to update penalty count:', updateError);

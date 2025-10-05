@@ -39,6 +39,17 @@ const getStatusInfo = (pothole) => {
     }
 };
 
+const legendItems = [
+    { text: 'Reopened', color: '#F97316' }, // Orange
+    { text: 'Final Review', color: '#A855F7' }, // Purple
+    { text: 'Verified', color: '#3B82F6' }, // Blue
+    { text: 'Repaired', color: '#10B981' }, // Green
+    { text: 'Under Review / Assigned', color: '#F59E0B' }, // Amber
+    { text: 'Discarded', color: '#EF4444' }, // Red
+    { text: 'Unverified / Unknown', color: '#6B7280' }, // Grey
+];
+
+
 const ApprovePothole = () => {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
@@ -51,13 +62,13 @@ const ApprovePothole = () => {
     const [isAddressLoading, setIsAddressLoading] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [isUpdating, setIsUpdating] = useState(false);
+    const [isLegendVisible, setIsLegendVisible] = useState(false);
 
     // Fetch all potholes from the API
     const fetchPotholes = async () => {
         try {
             const response = await apiConnector("get", "/api/potholes/all");
             setPotholes(response.data);
-            console.log("Fetched potholes:", response.data);
         } catch (error) {
             console.error("Failed to fetch potholes:", error);
             toast.error("Could not load pothole data.");
@@ -103,12 +114,14 @@ const ApprovePothole = () => {
             center: [72.8777, 19.0760], // Default center to Mumbai
             zoom: 10
         });
-        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        
+        map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
         map.addControl(new mapboxgl.GeolocateControl({
             positionOptions: { enableHighAccuracy: true },
             trackUserLocation: true,
             showUserHeading: true
-        }), 'top-right');
+        }), 'bottom-right');
+
         mapRef.current = map;
         return () => {
             map.remove();
@@ -129,13 +142,13 @@ const ApprovePothole = () => {
             let color;
             const statusInfo = getStatusInfo(pothole);
 
-            if (statusInfo.text === 'Reopened') color = '#F97316'; // Orange
-            else if (statusInfo.text === 'Discarded') color = '#EF4444'; // Red
-            else if (statusInfo.text === 'Under Review' || statusInfo.text === 'Assigned') color = '#F59E0B'; // Amber
-            else if (statusInfo.text === 'Repaired') color = '#10B981'; // Green
-            else if (statusInfo.text === 'Verified') color = '#3B82F6'; // Blue
-            else if (statusInfo.text === 'Final Review') color = '#A855F7'; // Purple
-            else color = '#6B7280'; // Grey for Unverified/Unknown
+            if (statusInfo.text === 'Reopened') color = legendItems.find(i => i.text === 'Reopened').color;
+            else if (statusInfo.text === 'Discarded') color = legendItems.find(i => i.text === 'Discarded').color;
+            else if (statusInfo.text === 'Under Review' || statusInfo.text === 'Assigned') color = legendItems.find(i => i.text === 'Under Review / Assigned').color;
+            else if (statusInfo.text === 'Repaired') color = legendItems.find(i => i.text === 'Repaired').color;
+            else if (statusInfo.text === 'Verified') color = legendItems.find(i => i.text === 'Verified').color;
+            else if (statusInfo.text === 'Final Review') color = legendItems.find(i => i.text === 'Final Review').color;
+            else color = legendItems.find(i => i.text === 'Unverified / Unknown').color;
 
             const marker = new mapboxgl.Marker({ color })
                 .setLngLat([pothole.longitude, pothole.latitude])
@@ -223,7 +236,6 @@ const ApprovePothole = () => {
     const handleRejectRepair = async (contractId) => {
         setIsUpdating(true);
         const toastId = toast.loading("Rejecting Repair...");
-        console.log("Rejecting repair for contract ID:", contractId);
         try {
             await apiConnector("patch", `${potholeEndpoints.REJECT_REPAIR}/${contractId}`, {});
             toast.success("Repair Rejected. Contractor has been notified.", { id: toastId });
@@ -240,7 +252,6 @@ const ApprovePothole = () => {
     const handleDiscardReopen = async (potholeId) => {
         setIsUpdating(true);
         const toastId = toast.loading("Discarding Reopen Claim...");
-        console.log("Discarding reopen claim for pothole ID:", potholeId);
         try {
             await apiConnector("patch", `${potholeEndpoints.DISCARD_REOPEN}/${potholeId}`, {});
             toast.success("Reopen claim discarded and status set to fixed.", { id: toastId });
@@ -257,7 +268,6 @@ const ApprovePothole = () => {
     const handlePenalizeReopen = async (contractId) => {
         setIsUpdating(true);
         const toastId = toast.loading("Penalizing Contract...");
-        console.log("Penalizing contract ID:", contractId);
         try {
             await apiConnector("patch", `${potholeEndpoints.PENALIZE_REOPEN}/${contractId}`, {});
             toast.success("Contract has been penalized.", { id: toastId });
@@ -279,6 +289,35 @@ const ApprovePothole = () => {
         <div className="relative w-full h-full">
             <div ref={mapContainerRef} className="w-full h-full" />
 
+            <div className="absolute top-3 right-3 flex flex-col items-end">
+                <button
+                    onClick={() => setIsLegendVisible(!isLegendVisible)}
+                    className="bg-white p-2 rounded-md shadow-lg text-gray-700 hover:bg-gray-100"
+                    title="Toggle Legend"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                    </svg>
+                </button>
+
+                {isLegendVisible && (
+                    <div className="bg-white rounded-lg shadow-xl p-3 mt-2 w-56 animate-fade-in">
+                        <h4 className="font-bold text-sm mb-2 border-b pb-1">Marker Legend</h4>
+                        <ul className="space-y-1">
+                            {legendItems.map(item => (
+                                <li key={item.text} className="flex items-center">
+                                    <span
+                                        className="w-4 h-4 rounded-full mr-2"
+                                        style={{ backgroundColor: item.color }}
+                                    ></span>
+                                    <span className="text-xs text-gray-700">{item.text}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+            </div>
+
             {selectedPothole && (
                 <div className="absolute bottom-0 left-0 right-0 z-10 bg-white rounded-t-lg shadow-2xl p-4 flex flex-col gap-3 animate-fade-in md:bottom-5 md:right-5 md:left-auto md:rounded-lg md:w-full md:max-w-sm">
                     {/* Header */}
@@ -291,10 +330,8 @@ const ApprovePothole = () => {
                     <div>
                         <p className="text-sm text-gray-700"><span className="font-semibold">Description:</span> {selectedPothole.description}</p>
 
-                        {/* --- MODIFIED LINE --- */}
                         {['under_review', 'assigned', 'reopened'].includes(selectedPothole.status) && (
-                            <p className={`mt-2 text-sm font-medium text-gray-800 p-2 rounded-md ${selectedPothole.status === 'reopened' ? 'bg-orange-100' : 'bg-yellow-100'
-                                }`}>
+                            <p className={`mt-2 text-sm font-medium text-gray-800 p-2 rounded-md ${selectedPothole.status === 'reopened' ? 'bg-orange-100' : 'bg-yellow-100'}`}>
                                 <span className="font-semibold">Assigned To:</span>{' '}
                                 {selectedPothole.bids?.find(bid => bid.status === 'accepted')?.users?.name || 'Contractor Info Unavailable'}
                             </p>
@@ -332,7 +369,7 @@ const ApprovePothole = () => {
                     {selectedPothole.status === 'reopened' && selectedPothole.current_bid?.contracts?.[0]?.status !== 'penalized' && (
                         <div className="border-t pt-3 flex justify-between space-x-3">
                             <Button className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white" onClick={() => handleDiscardReopen(selectedPothole.id)} disabled={isUpdating}>Reject</Button>
-                            <Button className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" onClick={() => handlePenalizeReopen(selectedPothole.current_bid.contracts[0].id)} disabled={isUpdating}>Accept</Button>
+                            <Button className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" onClick={() => handlePenalizeReopen(selectedPothole.current_bid?.contracts?.[0]?.id)} disabled={isUpdating}>Accept</Button>
                         </div>
                     )}
 
