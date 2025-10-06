@@ -132,7 +132,7 @@ const EventModal = ({ isOpen, onClose, onSave, event }) => {
 // =================================================================================
 // --- EVENT CARD COMPONENT ---
 // =================================================================================
-const EventCard = ({ event, onRsvp, isAttending, canManage, onEdit, onDelete }) => {
+const EventCard = ({ event, onRsvp, isAttending, canManage, onEdit, onDelete, onShowAttendees, isPastEvent }) => {
     const startDate = new Date(event.start_time);
     const month = startDate.toLocaleString('default', { month: 'short' }).toUpperCase();
     const day = startDate.getDate();
@@ -147,11 +147,15 @@ const EventCard = ({ event, onRsvp, isAttending, canManage, onEdit, onDelete }) 
                 <h3 className="text-lg font-bold text-white">{event.title}</h3>
                 <p className="text-gray-400 text-sm flex items-center mt-1"><FaClock className="mr-2" /> {formatEventDate(event.start_time)}</p>
                 <p className="text-gray-400 text-sm flex items-center mt-1"><FaMapMarkerAlt className="mr-2" /> {event.location}</p>
-                <p className="text-gray-400 text-sm flex items-center mt-1"><FaUserFriends className="mr-2" /> {event.attendees.length} attending</p>
+                <button onClick={onShowAttendees} className="text-gray-400 text-sm flex items-center mt-1 hover:text-white"><FaUserFriends className="mr-2" /> {event.attendees.length} attending</button>
                 <div className="mt-4 pt-3 border-t border-gray-700 flex justify-between items-center">
-                    <button onClick={() => onRsvp(event.id, !isAttending)} className={isAttending ? 'button-success-sm' : 'button-primary-sm'}>
-                        {isAttending ? <><FaCheckCircle className="mr-2" /> Attending</> : 'RSVP'}
-                    </button>
+                    {isPastEvent ? (
+                        isAttending && <div className="button-success-sm">You attended this event</div>
+                    ) : (
+                        <button onClick={() => onRsvp(event.id, !isAttending)} className={isAttending ? 'button-success-sm' : 'button-primary-sm'}>
+                            {isAttending ? <><FaCheckCircle className="mr-2" /> Attending</> : 'RSVP'}
+                        </button>
+                    )}
                     {canManage && (
                         <div className="flex gap-2">
                             <button onClick={() => onEdit(event)} className="button-icon-sm"><FaEdit /></button>
@@ -183,6 +187,7 @@ const CommunityDetail = () => {
     const [events, setEvents] = useState([]);
     const [isEventsLoading, setIsEventsLoading] = useState(false);
     const [eventModal, setEventModal] = useState({ isOpen: false, event: null });
+    const [attendeesModal, setAttendeesModal] = useState({ isOpen: false, attendees: [] });
 
 
     // --- DATA FETCHING ---
@@ -247,18 +252,25 @@ const CommunityDetail = () => {
     }, [id, isEditing, fetchCommunityData, fetchEventsData]);
 
 
-    const { currentUserMembership, userRole, canManage, isOnlyAdmin } = useMemo(() => {
+    const { currentUserMembership, userRole, canManage, isOnlyAdmin, upcomingEvents, pastEvents } = useMemo(() => {
         if (!community || !account) return {};
         const membership = community.members.find(m => m.user.id === account.id);
         const role = membership?.role;
         const adminCount = community.members.filter(m => m.role === 'admin').length;
+
+        const now = new Date();
+        const upcoming = events.filter(event => new Date(event.start_time) > now);
+        const past = events.filter(event => new Date(event.start_time) <= now);
+
         return {
             currentUserMembership: membership,
             userRole: role,
             canManage: role === 'admin' || role === 'co-admin',
             isOnlyAdmin: role === 'admin' && adminCount === 1,
+            upcomingEvents: upcoming,
+            pastEvents: past,
         };
-    }, [community, account]);
+    }, [community, account, events]);
     
     // --- EVENT HANDLERS ---
 
@@ -309,8 +321,8 @@ const CommunityDetail = () => {
         setEvents(prevEvents => prevEvents.map(event => {
             if (event.id === eventId) {
                 const newAttendees = isRsvping 
-                ? [...event.attendees, account.id]
-                : event.attendees.filter(uid => uid !== account.id);
+                ? [...event.attendees, account]
+                : event.attendees.filter(user => user.id !== account.id);
                 return { ...event, attendees: newAttendees };
             }
             return event;
@@ -420,6 +432,26 @@ const CommunityDetail = () => {
                 onSave={handleSaveEvent}
                 event={eventModal.event} 
             />
+            {attendeesModal.isOpen && (
+                <Portal>
+                    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4">
+                        <div className="bg-[#1e1e1e] rounded-lg shadow-xl w-full max-w-lg animate-fade-in-up p-6">
+                            <h2 className="text-2xl text-white font-bold mb-4">Attendees</h2>
+                            <ul className="space-y-3">
+                                {attendeesModal.attendees.map(attendee => (
+                                    <li key={attendee.id} className="flex items-center bg-[#2a2a2a] p-3 rounded-lg">
+                                        <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center font-bold mr-4 flex-shrink-0">{attendee.name.charAt(0).toUpperCase()}</div>
+                                        <span className="text-white truncate">{attendee.id === account.id ? "You" : attendee.name}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            <div className="flex justify-end mt-6">
+                                <button onClick={() => setAttendeesModal({ isOpen: false, attendees: [] })} className="button-secondary">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </Portal>
+            )}
 
             <Link to="/communities" className="back-link"><FaArrowLeft /> Back to All Communities</Link>
 
@@ -449,7 +481,8 @@ const CommunityDetail = () => {
 
             <div className="flex border-b border-gray-700 mb-6 overflow-x-auto">
                 <button onClick={() => setActiveTab('members')} className={`tab-button ${activeTab === 'members' && 'active'}`}><FaUsers /> <span className='hidden sm:block'>Members</span> ({community.members.length})</button>
-                <button onClick={() => setActiveTab('events')} className={`tab-button ${activeTab === 'events' && 'active'}`}><FaCalendarAlt /> <span className='hidden sm:block'>Events</span> ({events.length})</button>
+                <button onClick={() => setActiveTab('events')} className={`tab-button ${activeTab === 'events' && 'active'}`}><FaCalendarAlt /> <span className='hidden sm:block'>Events</span> ({upcomingEvents.length})</button>
+                <button onClick={() => setActiveTab('past-events')} className={`tab-button ${activeTab === 'past-events' && 'active'}`}><FaCalendarAlt /> <span className='hidden sm:block'>Past Events</span> ({pastEvents.length})</button>
                 {userRole === 'admin' && <button onClick={() => setActiveTab('manage')} className={`tab-button ${activeTab === 'manage' && 'active'}`}><FaCog /> <span className='hidden sm:block'>Manage</span></button>}
             </div>
 
@@ -460,7 +493,7 @@ const CommunityDetail = () => {
                         {community.members.map(({ user, role }) => (
                             <li key={user.id} className="flex items-center bg-[#2a2a2a] p-3 rounded-lg">
                                 <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center font-bold mr-4 flex-shrink-0">{user.name.charAt(0).toUpperCase()}</div>
-                                <span className="text-white truncate">{user.name}</span>
+                                <span className="text-white truncate">{user.id === account.id ? "You" : user.name}</span>
                                 <div className={`flex items-center text-sm ml-auto ${ROLES[role].color} flex-shrink-0`}>
                                     {React.createElement(ROLES[role].icon, { className: "mr-1" })}
                                     <span>{ROLES[role].label}</span>
@@ -482,22 +515,51 @@ const CommunityDetail = () => {
                         )}
                     </div>
                     {isEventsLoading ? <div className="text-center py-8">Loading events...</div> : (
-                        events.length > 0 ? (
+                        upcomingEvents.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {events.map(event => (
+                                {upcomingEvents.map(event => (
                                     <EventCard 
                                         key={event.id}
                                         event={event}
                                         onRsvp={handleRsvp}
-                                        isAttending={event.attendees.includes(account.id)}
+                                        isAttending={event.attendees.some(attendee => attendee.id === account.id)}
                                         canManage={canManage}
                                         onEdit={(eventToEdit) => setEventModal({ isOpen: true, event: eventToEdit })}
                                         onDelete={handleDeleteEvent}
+                                        onShowAttendees={() => setAttendeesModal({ isOpen: true, attendees: event.attendees })}
+                                        isPastEvent={false}
                                     />
                                 ))}
                             </div>
                         ) : (
                             <p className="text-gray-400 text-center py-8">No upcoming events. {canManage ? "Why not create one?" : ""}</p>
+                        )
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'past-events' && (
+                <div className="bg-[#1e1e1e] p-6 rounded-lg animate-fade-in-up">
+                    <h2 className="text-2xl font-bold mb-4">Past Events</h2>
+                    {isEventsLoading ? <div className="text-center py-8">Loading events...</div> : (
+                        pastEvents.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {pastEvents.map(event => (
+                                    <EventCard 
+                                        key={event.id}
+                                        event={event}
+                                        onRsvp={handleRsvp}
+                                        isAttending={event.attendees.some(attendee => attendee.id === account.id)}
+                                        canManage={canManage}
+                                        onEdit={(eventToEdit) => setEventModal({ isOpen: true, event: eventToEdit })}
+                                        onDelete={handleDeleteEvent}
+                                        onShowAttendees={() => setAttendeesModal({ isOpen: true, attendees: event.attendees })}
+                                        isPastEvent={true}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-gray-400 text-center py-8">No past events found.</p>
                         )
                     )}
                 </div>
@@ -510,7 +572,7 @@ const CommunityDetail = () => {
                         <ul className="space-y-2 max-h-96 overflow-y-auto pr-2">
                             {community.members.map((member) => (
                                 <li key={member.user.id} className="flex items-center justify-between bg-[#2a2a2a] p-2 rounded-lg">
-                                    <span className="text-white">{member.user.name}</span>
+                                    <span className="text-white">{member.user.id === account.id ? "You" : member.user.name}</span>
                                     {member.user.id !== account.id ? <MemberActionsDropdown member={member} currentUserRole={userRole} onRoleChange={handleRoleChange} onRemove={handleRemoveMember}/> : <span className={`role-badge ${ROLES[member.role].color}`}>{ROLES[member.role].label}</span>}
                                 </li>
                             ))}

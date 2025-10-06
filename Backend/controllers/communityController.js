@@ -274,7 +274,7 @@ export const getCommunityEvents = async (req, res) => {
             .from('events')
             .select(`
                 *,
-                attendees:event_attendees(user_id)
+                attendees:event_attendees(users(*))
             `)
             .eq('community_id', communityId)
             .order('start_time', { ascending: true });
@@ -283,7 +283,7 @@ export const getCommunityEvents = async (req, res) => {
 
         const formattedEvents = events.map(event => ({
             ...event,
-            attendees: event.attendees.map(a => a.user_id)
+            attendees: event.attendees.map(a => a.users)
         }));
 
         res.status(200).json({ success: true, data: formattedEvents });
@@ -389,3 +389,49 @@ export const rsvpToEvent = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+const getCommunityDetails = async (req, res) => {
+  const { communityId } = req.params;
+  const userId = req.user.id; // Assuming you have user information in the request
+
+  try {
+    // Fetch community details
+    const { data: community, error: communityError } = await supabase
+      .from('communities')
+      .select('*')
+      .eq('id', communityId)
+      .single();
+
+    if (communityError) throw communityError;
+    if (!community) {
+      return res.status(404).json({ message: 'Community not found' });
+    }
+
+    // Fetch events for the community, filtering out past events
+    const now = new Date().toISOString();
+    const { data: events, error: eventsError } = await supabase
+      .from('events')
+      .select('*')
+      .eq('community_id', communityId)
+      .gt('date', now) // Only fetch future events
+      .order('date', { ascending: true });
+
+    if (eventsError) throw eventsError;
+
+    // Fetch members of the community
+    const { data: members, error: membersError } = await supabase
+      .from('community_members')
+      .select('user_id, users (id, name, email)')
+      .eq('community_id', communityId);
+
+    if (membersError) throw membersError;
+
+    // Check if the current user is a member of the community
+    const isMember = members.some(member => member.user_id === userId);
+
+    res.status(200).json({ community, events, members, isMember });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching community details', error: error.message });
+  }
+};
+
