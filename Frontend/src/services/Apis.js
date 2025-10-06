@@ -34,7 +34,20 @@ export const potholeEndpoints = {
   REJECT_REPAIR: "/api/potholes/reject-repair",
   DISCARD_REOPEN: BaseURL + 'api/potholes/reopen/discard',
   PENALIZE_REOPEN: BaseURL + 'api/potholes/reopen/penalize',
-  RE_REPORT_DISCARDED: (potholeId) => BaseURL + `api/potholes/${potholeId}/re-report-discarded/`
+  RE_REPORT_DISCARDED: (potholeId) => BaseURL + `api/potholes/${potholeId}/re-report-discarded/`,
+  DASHBOARD_STATUS_BY_SEVERITY: BaseURL + 'api/potholes/dashboard/status-by-severity'
+};
+
+export const dashboardEndpoints = {
+  REPORTS_VS_RESOLUTIONS: BaseURL + 'api/potholes/dashboard/reports-vs-resolutions'
+};
+
+export const funnelEndpoints = {
+  VERIFICATION_FUNNEL: BaseURL + 'api/potholes/dashboard/verification-funnel'
+};
+
+export const kpiEndpoints = {
+  DASHBOARD_KPIS: BaseURL + 'api/potholes/dashboard/kpis'
 };
 
 export const mlEndpoints = {

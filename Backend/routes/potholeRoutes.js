@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 // Import both controller functions
-import { checkNearbyPotholes, getAllPotholes, reportPothole,verifyPothole,verifyPotholeWithSeverity,discardPothole, finalizePotholeRepair, rejectPotholeRepair,reportDuplicatePothole,discardReopen,penalizeReopen,reportDuplicatePotholeDiscarded,detectSeverityFromImage } from '../controllers/potholeController.js'; 
+import { checkNearbyPotholes, getAllPotholes, reportPothole,verifyPothole,verifyPotholeWithSeverity,discardPothole, finalizePotholeRepair, rejectPotholeRepair,reportDuplicatePothole,discardReopen,penalizeReopen,reportDuplicatePotholeDiscarded,detectSeverityFromImage, getStatusBySeverity, getReportsVsResolutions, getVerificationFunnel, getDashboardKpis } from '../controllers/potholeController.js'; 
 import { verifyImage } from '../middleware/verifyImage.js';
 
 const router = express.Router();
@@ -23,6 +23,10 @@ router.post(
 );
 
 router.get('/all', getAllPotholes);
+router.get('/dashboard/status-by-severity', getStatusBySeverity);
+router.get('/dashboard/reports-vs-resolutions', getReportsVsResolutions);
+router.get('/dashboard/verification-funnel', getVerificationFunnel);
+router.get('/dashboard/kpis', getDashboardKpis);
 
 router.patch('/verify/:id', verifyPothole);
 router.patch('/verify-with-severity/:id', verifyPotholeWithSeverity);

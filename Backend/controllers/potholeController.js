@@ -863,3 +863,134 @@ export const reportDuplicatePotholeDiscarded = async (req, res) => {
         res.status(500).json({ error: 'Failed to report duplicate pothole.' });
     }
 };
+
+// --- Dashboard: status by severity ---
+export const getStatusBySeverity = async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('potholes').select('status, severity');
+        if (error) throw error;
+        const counts = {};
+        for (const row of data || []) {
+            const sev = row.severity || 'Unknown';
+            const st = row.status || 'unknown';
+            if (!counts[sev]) counts[sev] = {};
+            counts[sev][st] = (counts[sev][st] || 0) + 1;
+        }
+        const series = [];
+        Object.entries(counts).forEach(([severity, statusMap]) => {
+            Object.entries(statusMap).forEach(([status, count]) => {
+                series.push({ severity, status, count });
+            });
+        });
+        return res.status(200).json({ counts, series });
+    } catch (err) {
+        console.error('Error aggregating status by severity:', err);
+        return res.status(500).json({ error: 'Failed to get status by severity' });
+    }
+};
+
+// --- Dashboard: reports vs resolutions (completed contracts) ---
+export const getReportsVsResolutions = async (req, res) => {
+    try {
+        const now = new Date();
+        const { start, end } = req.query;
+        const endDate = end ? new Date(end) : now;
+        const startDate = start ? new Date(start) : new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
+
+        const [{ data: potholes, error: potholesErr }, { data: contracts, error: contractsErr }] = await Promise.all([
+            supabase.from('potholes').select('created_at'),
+            supabase.from('contracts').select('actual_end_date, status').eq('status', 'completed')
+        ]);
+        if (potholesErr) throw potholesErr;
+        if (contractsErr) throw contractsErr;
+
+        const dayKey = (d) => {
+            const dt = new Date(d);
+            dt.setHours(0, 0, 0, 0);
+            return dt.toISOString().slice(0, 10);
+        };
+
+        const byDay = new Map();
+        const cursor = new Date(startDate);
+        cursor.setHours(0, 0, 0, 0);
+        const endCursor = new Date(endDate);
+        endCursor.setHours(0, 0, 0, 0);
+        while (cursor <= endCursor) {
+            byDay.set(dayKey(cursor), { date: dayKey(cursor), reported: 0, resolved: 0 });
+            cursor.setDate(cursor.getDate() + 1);
+        }
+
+        for (const p of potholes || []) {
+            if (!p.created_at) continue;
+            const k = dayKey(p.created_at);
+            if (byDay.has(k)) byDay.get(k).reported += 1;
+        }
+        for (const c of contracts || []) {
+            if (!c.actual_end_date) continue;
+            const k = dayKey(c.actual_end_date);
+            if (byDay.has(k)) byDay.get(k).resolved += 1;
+        }
+
+        const series = Array.from(byDay.values());
+        return res.status(200).json({ start: dayKey(startDate), end: dayKey(endDate), series });
+    } catch (err) {
+        console.error('Error aggregating reports vs resolutions:', err);
+        return res.status(500).json({ error: 'Failed to get reports vs resolutions' });
+    }
+};
+
+// --- Dashboard: verification funnel ---
+export const getVerificationFunnel = async (req, res) => {
+    try {
+        const [{ data: potholes, error: potholesErr }, { data: completedContracts, error: contractsErr }] = await Promise.all([
+            supabase.from('potholes').select('id, verify, status'),
+            supabase.from('contracts').select('id, status').eq('status', 'completed')
+        ]);
+        if (potholesErr) throw potholesErr;
+        if (contractsErr) throw contractsErr;
+
+        const reported = (potholes || []).length;
+        const verified = (potholes || []).filter(p => p.verify === true).length;
+        const assignedUnderReview = (potholes || []).filter(p => p.status === 'under_review').length;
+        const completed = (completedContracts || []).length;
+
+        return res.status(200).json({
+            steps: [
+                { key: 'reported', label: 'Reported', count: reported },
+                { key: 'verified', label: 'Verified', count: verified },
+                { key: 'under_review', label: 'Assigned / Under Review', count: assignedUnderReview },
+                { key: 'completed', label: 'Completed', count: completed },
+            ]
+        });
+    } catch (err) {
+        console.error('Error aggregating verification funnel:', err);
+        return res.status(500).json({ error: 'Failed to get verification funnel' });
+    }
+};
+// --- Dashboard KPIs: bids submitted, accepted, acceptance rate, average resolution time ---
+export const getDashboardKpis = async (req, res) => {
+    try {
+        const [bidsRes, contractsRes] = await Promise.all([
+            supabase.from('bids').select('status'),
+            supabase.from('contracts').select('start_date, actual_end_date, status')
+        ]);
+
+        if (bidsRes.error) throw bidsRes.error;
+        if (contractsRes.error) throw contractsRes.error;
+
+        const bids = bidsRes.data || [];
+        const bids_submitted = bids.length;
+        const bids_accepted = bids.filter(b => b.status === 'accepted').length;
+        const acceptance_rate_pct = bids_submitted > 0 ? +(bids_accepted / bids_submitted * 100).toFixed(1) : 0;
+
+        const completed = (contractsRes.data || []).filter(c => c.status === 'completed' && c.start_date && c.actual_end_date);
+        const durationsMs = completed.map(c => new Date(c.actual_end_date).getTime() - new Date(c.start_date).getTime()).filter(ms => ms > 0);
+        const avgMs = durationsMs.length ? durationsMs.reduce((a, b) => a + b, 0) / durationsMs.length : 0;
+        const average_resolution_days = +(avgMs / (1000 * 60 * 60 * 24)).toFixed(1);
+
+        return res.status(200).json({ bids_submitted, bids_accepted, acceptance_rate_pct, average_resolution_days });
+    } catch (err) {
+        console.error('Error computing dashboard KPIs:', err);
+        return res.status(500).json({ error: 'Failed to compute dashboard KPIs' });
+    }
+};
