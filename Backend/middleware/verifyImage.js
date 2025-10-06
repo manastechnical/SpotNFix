@@ -46,9 +46,9 @@ export const verifyImage = (req, res, next) => {
         const photoTimestamp = exifData.tags.DateTimeOriginal * 1000; 
         const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
 
-        if (!photoTimestamp || photoTimestamp < fiveMinutesAgo) {
-            return res.status(400).json({ error: "Image is too old. Please submit a photo taken within the last 5 minutes." });
-        }
+        // if (!photoTimestamp || photoTimestamp < fiveMinutesAgo) {
+        //     return res.status(400).json({ error: "Image is too old. Please submit a photo taken within the last 5 minutes." });
+        // }
         // Timestamp freshness check removed as requested
 
         // If all checks pass, move to the next function in the chain

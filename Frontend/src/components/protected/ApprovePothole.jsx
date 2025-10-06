@@ -153,10 +153,17 @@ const ApprovePothole = () => {
     // Action Handlers
     const handleAcceptPothole = async (potholeId) => {
         setIsUpdating(true);
-        const toastId = toast.loading("Verifying...");
+        const toastId = toast.loading("Verifying and detecting severity...");
         try {
-            await apiConnector("patch", `${potholeEndpoints.VERIFY_POTHOLE}/${potholeId}`, {});
-            toast.success("Pothole Verified!", { id: toastId });
+            const response = await apiConnector("patch", `${potholeEndpoints.VERIFY_POTHOLE_WITH_SEVERITY}/${potholeId}`, {});
+            const detectedSeverity = response.data?.detectedSeverity;
+            
+            if (detectedSeverity) {
+                toast.success(`Pothole Verified! Severity: ${detectedSeverity}`, { id: toastId });
+            } else {
+                toast.success("Pothole Verified!", { id: toastId });
+            }
+            
             setSelectedPothole(null);
             await fetchPotholes();
         } catch (error) {
@@ -317,7 +324,14 @@ const ApprovePothole = () => {
 
                     {/* Status Tags */}
                     <div className="flex justify-between items-center">
-                        <span className={`px-3 py-1 text-xs font-bold rounded-full ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700" : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>{selectedPothole.severity} Severity</span>
+                        <div className="flex flex-col gap-1">
+                            <span className={`px-3 py-1 text-xs font-bold rounded-full ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700" : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
+                                {selectedPothole.severity} Severity
+                            </span>
+                            {selectedPothole.verify && selectedPothole.severity && (
+                                <span className="text-xs text-gray-500 text-center">🤖 AI Detected</span>
+                            )}
+                        </div>
                         <span className={`px-3 py-1 text-xs font-bold rounded-full ${getStatusInfo(selectedPothole).className}`}>{getStatusInfo(selectedPothole).text}</span>
                     </div>
 
@@ -325,7 +339,9 @@ const ApprovePothole = () => {
                     {selectedPothole.status === 'reported' && !selectedPothole.verify && (
                         <div className="border-t pt-3 flex justify-between space-x-3">
                             <Button className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white" onClick={() => handleRejectPothole(selectedPothole.id)} disabled={isUpdating}>Reject</Button>
-                            <Button className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" onClick={() => handleAcceptPothole(selectedPothole.id)} disabled={isUpdating}>Accept</Button>
+                            <Button className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" onClick={() => handleAcceptPothole(selectedPothole.id)} disabled={isUpdating}>
+                                {isUpdating ? "Analyzing..." : "Accept & Analyze"}
+                            </Button>
                         </div>
                     )}
 

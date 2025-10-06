@@ -1,5 +1,6 @@
 import supabase from '../supabaseClient.js';
 import { v4 as uuidv4 } from 'uuid';
+import { detectPotholeSeverity, imageBufferToBase64 } from '../services/geminiService.js';
 
 export const checkNearbyPotholes = async (req, res) => {
     const { lat, lng, radius } = req.query;
@@ -246,6 +247,85 @@ export const verifyPothole = async (req, res) => {
 
     } catch (error) {
         console.error('Error verifying pothole:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// New function to verify pothole with severity detection
+export const verifyPotholeWithSeverity = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        // First, get the pothole and its associated image
+        const { data: potholeData, error: fetchError } = await supabase
+            .from('potholes')
+            .select(`
+                id,
+                latitude,
+                longitude,
+                description,
+                severity,
+                status,
+                verify,
+                images (
+                    image_url,
+                    type
+                )
+            `)
+            .eq('id', id)
+            .single();
+
+        if (fetchError) {
+            if (fetchError.code === 'PGRST116') {
+                return res.status(404).json({ error: 'Pothole not found.' });
+            }
+            throw fetchError;
+        }
+
+        // Check if pothole has an image
+        if (!potholeData.images || potholeData.images.length === 0) {
+            return res.status(400).json({ error: 'No image found for this pothole.' });
+        }
+
+        // Get the first image URL
+        const imageUrl = potholeData.images[0].image_url;
+        
+        // Fetch the image from Supabase storage
+        const imageResponse = await fetch(imageUrl);
+        if (!imageResponse.ok) {
+            throw new Error(`Failed to fetch image: ${imageResponse.statusText}`);
+        }
+        
+        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+        const imageBase64 = imageBufferToBase64(imageBuffer, 'image/jpeg');
+        
+        // Detect severity using Gemini
+        console.log(`[Backend] Detecting severity for pothole ${id}...`);
+        const detectedSeverity = await detectPotholeSeverity(imageBase64, 'image/jpeg');
+        
+        // Update the pothole with verification and detected severity
+        const { data: updatedData, error: updateError } = await supabase
+            .from('potholes')
+            .update({ 
+                verify: true,
+                severity: detectedSeverity
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) {
+            throw updateError;
+        }
+
+        res.status(200).json({ 
+            message: 'Pothole verified and severity detected successfully!', 
+            data: updatedData,
+            detectedSeverity: detectedSeverity
+        });
+
+    } catch (error) {
+        console.error('Error verifying pothole with severity:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
@@ -588,6 +668,38 @@ export const penalizeReopen = async (req, res) => {
     } catch (error) {
         console.error('Error penalizing contract:', error.message);
         res.status(500).json({ error: 'An unexpected error occurred on the server.' });
+    }
+};
+
+// New function to detect severity from uploaded image
+export const detectSeverityFromImage = async (req, res) => {
+    try {
+        // Check if a file was uploaded
+        if (!req.file) {
+            return res.status(400).json({ error: "No image file provided." });
+        }
+
+        const imageFile = req.file;
+        const imageBuffer = imageFile.buffer;
+        const imageBase64 = imageBufferToBase64(imageBuffer, imageFile.mimetype);
+        
+        // Detect severity using Gemini
+        console.log(`[Backend] Detecting severity from uploaded image...`);
+        const detectedSeverity = await detectPotholeSeverity(imageBase64, imageFile.mimetype);
+        
+        res.status(200).json({ 
+            success: true,
+            severity: detectedSeverity,
+            message: 'Severity detected successfully'
+        });
+
+    } catch (error) {
+        console.error('Error detecting severity from image:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to detect severity',
+            severity: 'Medium' // Fallback severity
+        });
     }
 };
 

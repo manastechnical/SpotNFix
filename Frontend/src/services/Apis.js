@@ -28,6 +28,7 @@ export const adminEndpoints = {
 
 export const potholeEndpoints = {
   VERIFY_POTHOLE: BaseURL + 'api/potholes/verify',
+  VERIFY_POTHOLE_WITH_SEVERITY: BaseURL + 'api/potholes/verify-with-severity',
   DISCARD_POTHOLE: BaseURL + 'api/potholes/discard',
   FINALIZE_REPAIR: "/api/potholes/finalize-repair",
   REJECT_REPAIR: "/api/potholes/reject-repair",
@@ -38,6 +39,10 @@ export const potholeEndpoints = {
 
 export const mlEndpoints = {
   DETECT: MLBaseURL + 'detect',
+};
+
+export const severityEndpoints = {
+  DETECT_SEVERITY: BaseURL + 'api/potholes/detect-severity',
 };
 
 export const contractorEndpoints = {

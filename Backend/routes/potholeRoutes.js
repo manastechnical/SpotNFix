@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 // Import both controller functions
-import { checkNearbyPotholes, getAllPotholes, reportPothole,verifyPothole,discardPothole, finalizePotholeRepair, rejectPotholeRepair,reportDuplicatePothole,discardReopen,penalizeReopen,reportDuplicatePotholeDiscarded } from '../controllers/potholeController.js'; 
+import { checkNearbyPotholes, getAllPotholes, reportPothole,verifyPothole,verifyPotholeWithSeverity,discardPothole, finalizePotholeRepair, rejectPotholeRepair,reportDuplicatePothole,discardReopen,penalizeReopen,reportDuplicatePotholeDiscarded,detectSeverityFromImage } from '../controllers/potholeController.js'; 
 import { verifyImage } from '../middleware/verifyImage.js';
 
 const router = express.Router();
@@ -10,6 +10,9 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 router.get('/nearby', checkNearbyPotholes);
+
+// Route for detecting severity from uploaded image
+router.post('/detect-severity', upload.single('image'), detectSeverityFromImage);
 
 // The final, complete reporting route
 router.post(
@@ -22,6 +25,7 @@ router.post(
 router.get('/all', getAllPotholes);
 
 router.patch('/verify/:id', verifyPothole);
+router.patch('/verify-with-severity/:id', verifyPotholeWithSeverity);
 router.patch('/discard/:id', discardPothole);
 router.patch('/finalize-repair/:id', finalizePotholeRepair);
 router.patch('/reject-repair/:id', rejectPotholeRepair); // New route for rejecting repair

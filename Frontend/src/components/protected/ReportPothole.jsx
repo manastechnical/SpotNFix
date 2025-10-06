@@ -4,12 +4,13 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { useDropzone } from 'react-dropzone';
 import toast, { Toaster } from 'react-hot-toast';
 import axios from 'axios';
-import { mlEndpoints } from '../../services/Apis';
+import { mlEndpoints, severityEndpoints } from '../../services/Apis';
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { FiAlertTriangle } from 'react-icons/fi';
 import { FaLocationArrow } from "react-icons/fa";
 import { useSelector } from 'react-redux';
+import BoundingBoxOverlay from '../common/BoundingBoxOverlay';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -61,6 +62,7 @@ const ReportPothole = () => {
     const [mlChecking, setMlChecking] = useState(false);
     const [mlDetected, setMlDetected] = useState(null);
     const [mlDetections, setMlDetections] = useState([]);
+    const [detectedSeverity, setDetectedSeverity] = useState(null);
     const [address, setAddress] = useState("");
     const [isGeocoding, setIsGeocoding] = useState(false);
     const [nearbyPotholes, setNearbyPotholes] = useState([]);
@@ -246,6 +248,9 @@ const ReportPothole = () => {
             setMlChecking(true);
             setMlDetected(null);
             setMlDetections([]);
+            setDetectedSeverity(null);
+            
+            // First, detect potholes
             const formData = new FormData();
             formData.append('image', file);
             console.log('[FE] Calling ML detect at:', mlEndpoints.DETECT);
@@ -253,10 +258,31 @@ const ReportPothole = () => {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
             console.log('[FE] ML response:', data);
+            
             if (data && data.success) {
                 setMlDetected(Boolean(data.detected));
                 setMlDetections(data.detections || []);
-                if (!data.detected) {
+                
+                if (data.detected) {
+                    // If potholes detected, also detect severity
+                    console.log('[FE] Potholes detected, now detecting severity...');
+                    const severityFormData = new FormData();
+                    severityFormData.append('image', file);
+                    
+                    try {
+                        const severityResponse = await axios.post(severityEndpoints.DETECT_SEVERITY, severityFormData, {
+                            headers: { 'Content-Type': 'multipart/form-data' },
+                        });
+                        
+                        if (severityResponse.data && severityResponse.data.success) {
+                            setDetectedSeverity(severityResponse.data.severity);
+                            console.log('[FE] Severity detected:', severityResponse.data.severity);
+                        }
+                    } catch (severityError) {
+                        console.error('[FE] Severity detection failed:', severityError);
+                        setDetectedSeverity('Medium'); // Fallback
+                    }
+                } else {
                     toast.error('No potholes detected in the image. Please upload a valid pothole image.');
                 }
             } else {
@@ -289,7 +315,7 @@ const ReportPothole = () => {
             formData.append("description", description);
             formData.append("lat", lat);
             formData.append("lng", lng);
-            formData.append("severity", severity);
+            formData.append("severity", detectedSeverity || severity);
             formData.append("user_id", userId);
             formData.append("media", mediaFiles[0]);
             try {
@@ -495,7 +521,15 @@ const ReportPothole = () => {
                             {imgSrc && (
                                 <div className="mt-4">
                                     <ReactCrop crop={crop} onChange={c => setCrop(c)}>
-                                        <img src={imgSrc} alt="Pothole Preview" style={{ maxHeight: '200px' }} />
+                                        <BoundingBoxOverlay
+                                            imageSrc={imgSrc}
+                                            detections={mlDetections}
+                                            imageStyle={{ maxHeight: '200px' }}
+                                            showLabels={true}
+                                            boxColor={mlDetected ? '#10b981' : '#ef4444'}
+                                            labelColor="#ffffff"
+                                            labelBgColor={mlDetected ? '#059669' : '#dc2626'}
+                                        />
                                     </ReactCrop>
                                 </div>
                             )}
@@ -513,7 +547,21 @@ const ReportPothole = () => {
                                 <p className="mt-2 text-sm text-red-600">No potholes detected in the image. Please upload a valid pothole image.</p>
                             )}
                             {mlDetected && mlDetections?.length > 0 && (
-                                <p className="mt-2 text-sm text-green-700">Potholes detected: {mlDetections.length}</p>
+                                <div className="mt-2">
+                                    <p className="text-sm text-green-700">Potholes detected: {mlDetections.length}</p>
+                                    {detectedSeverity && (
+                                        <div className="mt-2 flex items-center gap-2">
+                                            <span className={`px-3 py-1 text-xs font-bold rounded-full ${
+                                                detectedSeverity === "High" ? "bg-red-100 text-red-700" : 
+                                                detectedSeverity === "Medium" ? "bg-yellow-100 text-yellow-700" : 
+                                                "bg-green-100 text-green-700"
+                                            }`}>
+                                                Severity: {detectedSeverity}
+                                            </span>
+                                            <span className="text-xs text-gray-500">🤖 AI Detected</span>
+                                        </div>
+                                    )}
+                                </div>
                             )}
                         </div>
                     )}
@@ -539,13 +587,17 @@ const ReportPothole = () => {
                             </div>
                             <div className="mt-4">
                                 <label className="block text-sm font-medium">Detected Severity</label>
-                                {/* isAnalyzing && <p className="text-sm text-gray-500">Analyzing image...</p> */}
-                                {severity && (
-                                    <div className={`text-sm font-bold p-2 rounded-md inline-block ${severity === 'High' ? 'bg-red-100 text-red-800' :
-                                        severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                                            'bg-green-100 text-green-800'
-                                        }`}>
-                                        {severity}
+                                {(detectedSeverity || severity) && (
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <div className={`text-sm font-bold p-2 rounded-md inline-block ${(detectedSeverity || severity) === 'High' ? 'bg-red-100 text-red-800' :
+                                            (detectedSeverity || severity) === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                                'bg-green-100 text-green-800'
+                                            }`}>
+                                            {detectedSeverity || severity}
+                                        </div>
+                                        {detectedSeverity && (
+                                            <span className="text-xs text-gray-500">🤖 AI Detected</span>
+                                        )}
                                     </div>
                                 )}
                             </div>
