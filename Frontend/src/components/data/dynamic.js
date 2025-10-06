@@ -45,6 +45,14 @@ const getFeatures = () => {
       route: '/approve-pothole',
     });
   }
+  if (userData?.role === 'government' || userData?.role==='citizen') {
+    features.push({
+      featureName: 'communities',
+      displayName: 'Community',
+      logoUsed: HomeIcon,
+      route: '/communities',
+    });
+  }
 
   return features;
 };

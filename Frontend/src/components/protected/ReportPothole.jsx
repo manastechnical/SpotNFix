@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useDropzone } from 'react-dropzone';
-import toast, { Toaster } from 'react-hot-toast';
+import {toast, Toaster } from 'react-hot-toast';
 import axios from 'axios';
 import { mlEndpoints, severityEndpoints } from '../../services/Apis';
 import ReactCrop from 'react-image-crop';

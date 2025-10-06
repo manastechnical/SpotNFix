@@ -1,4 +1,5 @@
 import supabase from '../supabaseClient.js';
+import { sendContractAssignEmail } from '../utils/sendContractAssignEmail.js';
 
 export const submitBid = async (req, res) => {
     const { pothole_id, contractor_id, amount, description } = req.body;
@@ -85,15 +86,29 @@ export const acceptBid = async (req, res) => {
 
         // --- Step 1: Update the Pothole ---
         // Change the pothole's status to 'under_review'.
-        const { error: potholeUpdateError } = await supabase
+        const { data, error: potholeUpdateError } = await supabase
             .from('potholes')
             .update({ status: 'under_review' })
-            .eq('id', potholeId);
+            .eq('id', potholeId)
+            .select(`
+                    *,
+                    users (id,email)
+            `);
 
         if (potholeUpdateError) {
             throw potholeUpdateError;
         }
+        if (data[0]?.users?.email) {
 
+            // Log the email for debugging
+            console.log("email", data[0].users.email);
+
+
+            await sendContractAssignEmail(data[0].users.email, data[0].description);
+
+        } else {
+            console.warn("Could not send email: User email not found in the data.");
+        }
         // --- Step 2: Update the Bid ---
         // Change the status of the accepted bid to 'accepted'.
         const { error: bidUpdateError } = await supabase

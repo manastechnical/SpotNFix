@@ -48,3 +48,21 @@ export const severityEndpoints = {
 export const contractorEndpoints = {
   COMPLETE_WORK_API: (bidId) => BaseURL + `api/contractor/complete-work/${bidId}`,
 };
+
+export const communityEndpoints = {
+  GET_COMMUNITIES_API: BaseURL + `api/communities`,
+  CREATE_COMMUNITY_API: BaseURL + `api/communities/create`,
+  GET_COMMUNITY_BY_ID_API: BaseURL + `api/communities/`,
+  JOIN_COMMUNITY_API: (id) => BaseURL + `api/communities/${id}/join`,
+  LEAVE_COMMUNITY_API: (id) => BaseURL + `api/communities/${id}/leave`,
+  CREATE_EVENT_API: (id) => BaseURL + `api/communities/${id}/events/create`,
+  REMOVE_MEMBER_API: (communityId, memberId) => BaseURL + `api/communities/${communityId}/members/${memberId}`,
+  UPDATE_MEMBER_ROLE_API: (communityId, memberId) => BaseURL + `api/communities/${communityId}/members/${memberId}/role`,
+   UPDATE_COMMUNITY_API: (id) => BaseURL + `api/communities/${id}`,
+  DELETE_COMMUNITY_API: (id) => BaseURL + `api/communities/${id}`,
+  GET_EVENTS_API: (communityId) => BaseURL + `api/communities/${communityId}/events`,
+  CREATE_EVENT_API: (communityId) => BaseURL + `api/communities/${communityId}/events`,
+  UPDATE_EVENT_API: (eventId) => BaseURL + `api/communities/events/${eventId}`,
+  DELETE_EVENT_API: (eventId) => BaseURL + `api/communities/events/${eventId}`,
+  RSVP_EVENT_API: (eventId) => BaseURL + `api/communities/events/${eventId}/rsvp`,
+};

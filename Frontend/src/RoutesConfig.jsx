@@ -17,6 +17,8 @@ import SuperAdminDashboard from './components/protected/Dashboard/SuperAdminDash
 import AdminLogin from './components/common/AdminLogin';
 import ApprovePothole from './components/protected/ApprovePothole';
 import BiddingDetails from './components/protected/BiddingDetails';
+import Communities from './components/protected/Communities';
+import CommunityDetail from './components/protected/CommunityDetail';
 
 const RoutesConfig = () => {
     const isLoggedIn = useSelector(isUserLoggedIn);
@@ -75,6 +77,8 @@ const RoutesConfig = () => {
                         <Route path="/admin" element={<SuperAdminDashboard />} />
                         <Route path="/approve-pothole" element={<ApprovePothole />} />
                         <Route path="/bidding-details" element={<BiddingDetails />} />
+                        <Route path="/communities" element={<Communities />} />
+                        <Route path="/community/:id" element={<CommunityDetail />} />
                     </Routes>
                 </div>
             </div>
