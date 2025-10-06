@@ -1,5 +1,5 @@
 import express from "express";
-import { login, registerContractor, registerGovernmentOfficial, registerUser, resendOtp, signInWithGoogle, validateOtp } from "../controllers/authController.js";
+import { login, registerContractor, registerGovernmentOfficial, registerUser, resendOtp, signInWithGoogle, validateOtp, forgotPassword, resetPassword } from "../controllers/authController.js";
 
 const router = express.Router();
 router.post("/register", registerUser);
@@ -9,5 +9,8 @@ router.post("/login", login);
 router.post("/sign-in-google", signInWithGoogle);
 router.post("/register-contractor", registerContractor);
 router.post("/register-government-official", registerGovernmentOfficial);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password/:token", resetPassword);
+
 
 export default router;

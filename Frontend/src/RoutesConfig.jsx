@@ -19,6 +19,9 @@ import ApprovePothole from './components/protected/ApprovePothole';
 import BiddingDetails from './components/protected/BiddingDetails';
 import Communities from './components/protected/Communities';
 import CommunityDetail from './components/protected/CommunityDetail';
+import ForgotPassword from "./components/common/ForgotPassword";
+import ResetPassword from "./components/common/ResetPassword";
+
 
 const RoutesConfig = () => {
     const isLoggedIn = useSelector(isUserLoggedIn);
@@ -58,6 +61,8 @@ const RoutesConfig = () => {
                     className="transition-all scrollbar-hide"
                     element={<VerifyEmail />}
                 />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password/:token" element={<ResetPassword />} />
                 <Route path="/register-contractor" className="transition-all scrollbar-hide" element={<ContractorRegister />} />
                 <Route path="/register-government-official" className="transition-all scrollbar-hide" element={<GovernmentOfficialRegister />} />
             </Routes>

@@ -9,6 +9,9 @@ export const authEndpoints = {
   GOOGLE_SIGN_IN: BaseURL + 'api/auth/sign-in-google',
   REGISTER_CONTRACTOR: BaseURL + 'api/auth/register-contractor',
   REGISTER_GOVERNMENT_OFFICIAL: BaseURL + 'api/auth/register-government-official',
+  FORGOT_PASSWORD_API: BaseURL + 'api/auth/forgot-password',
+  RESET_PASSWORD_API: BaseURL + 'api/auth/reset-password',
+
 };
 
 export const uploadEndPoints = {

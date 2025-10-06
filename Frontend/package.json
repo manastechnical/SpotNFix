@@ -26,6 +26,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^0.526.0",
     "mapbox-gl": "^3.14.0",
+    "nodemailer": "^7.0.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-dropzone": "^14.3.8",

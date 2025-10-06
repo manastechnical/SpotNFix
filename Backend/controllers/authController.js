@@ -6,6 +6,8 @@ import multer from 'multer';
 import axios from 'axios';
 import fs from 'fs';
 import { promisify } from 'util';
+import { sendPasswordResetEmail } from '../utils/sendPasswordResetEmail.js';
+import crypto from 'crypto'; 
 
 const unlinkAsync = promisify(fs.unlink);
 const readFileAsync = promisify(fs.readFile);
@@ -517,3 +519,75 @@ export const registerGovernmentOfficial = [
         }
     },
 ];
+
+
+
+export const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+        if (error || !user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        const token = crypto.randomBytes(20).toString('hex');
+        const expires = new Date(Date.now() + 36000000); // 10 hours
+
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ reset_password_token: token, reset_password_expires: expires })
+            .eq('id', user.id);
+
+        if (updateError) {
+            throw updateError;
+        }
+
+        await sendPasswordResetEmail(user.email, token);
+
+        res.status(200).json({ success: true, message: 'Password reset email sent' });
+    } catch (error) {
+        console.error('Forgot Password error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+export const resetPassword = async (req, res) => {
+    try {
+        const { token } = req.params;
+        const { password } = req.body;
+
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('reset_password_token', token)
+            .single();
+
+        if (error || !user) {
+            return res.status(400).json({ success: false, message: 'Password reset token is invalid or has expired.' });
+        }
+        
+        const now = new Date();
+        if (new Date(user.reset_password_expires) < now) {
+            return res.status(400).json({ success: false, message: 'Password reset token is invalid or has expired.' });
+        }
+
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ password: password, reset_password_token: null, reset_password_expires: null })
+            .eq('id', user.id);
+
+        if (updateError) {
+            throw updateError;
+        }
+
+        res.status(200).json({ success: true, message: 'Password has been reset' });
+    } catch (error) {
+        console.error('Reset Password error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
