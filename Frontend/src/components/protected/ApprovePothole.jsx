@@ -360,13 +360,25 @@ const ApprovePothole = () => {
                     </div>
 
                     {/* Status Tags */}
-                    <div className="flex justify-between items-center">
-                        <div className="flex flex-col gap-1">
-                            <span className={`px-3 py-1 text-xs font-bold rounded-full ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700" : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
-                                {selectedPothole.severity} Severity
-                            </span>
-                            {selectedPothole.verify && selectedPothole.severity && (
-                                <span className="text-xs text-gray-500 text-center">🤖 AI Detected</span>
+                    <div className="flex justify-between items-start">
+                        <div className="flex flex-col gap-2">
+                            <div className="flex flex-col gap-1">
+                                <span className={`px-3 py-1 text-xs font-bold rounded-full ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700" : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
+                                    {selectedPothole.severity} Severity
+                                </span>
+                                {selectedPothole.verify && selectedPothole.severity && (
+                                    <span className="text-xs text-gray-500 text-center">🤖 AI Detected</span>
+                                )}
+                            </div>
+                            {selectedPothole.pothole_type && (
+                                <div className="flex flex-col gap-1">
+                                    <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                                        {selectedPothole.pothole_type}
+                                    </span>
+                                    {selectedPothole.verify && (
+                                        <span className="text-xs text-gray-500 text-center">🤖 AI Detected</span>
+                                    )}
+                                </div>
                             )}
                         </div>
                         <span className={`px-3 py-1 text-xs font-bold rounded-full ${getStatusInfo(selectedPothole).className}`}>{getStatusInfo(selectedPothole).text}</span>

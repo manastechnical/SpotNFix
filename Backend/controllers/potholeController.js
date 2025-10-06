@@ -1,6 +1,6 @@
 import supabase from '../supabaseClient.js';
 import { v4 as uuidv4 } from 'uuid';
-import { detectPotholeSeverity, imageBufferToBase64 } from '../services/geminiService.js';
+import { detectPotholeSeverity, detectPotholeSeverityAndType, imageBufferToBase64 } from '../services/geminiService.js';
 import { sendPotholeStatusEmail } from '../utils/sendPotholeStatusEmail.js';
 import { sendPotholeFixedEmail } from '../utils/sendPotholeFixedEmail.js';
 import { sendRepairRejectedEmail } from '../utils/sendRepairRejectedEmail.js';
@@ -89,7 +89,7 @@ export const checkNearbyPotholes = async (req, res) => {
 
 export const reportPothole = async (req, res) => {
     // Data from the form (already verified by middleware)
-    const { lat, lng, description, severity, user_id } = req.body; // Assuming you'll send user_id from frontend
+    const { lat, lng, description, severity, pothole_type, user_id } = req.body; // Assuming you'll send user_id from frontend
     const imageFile = req.file;
 
     try {
@@ -122,6 +122,7 @@ export const reportPothole = async (req, res) => {
                     longitude: parseFloat(lng),
                     description: description,
                     severity: severity,
+                    pothole_type: pothole_type || 'Standard road damage',
                     status: 'reported',
                 },
             ])
@@ -179,6 +180,7 @@ export const getAllPotholes = async (req, res) => {
         longitude,
         description,
         severity,
+        pothole_type,
         status,
         verify,
         images (
@@ -279,6 +281,7 @@ export const verifyPotholeWithSeverity = async (req, res) => {
                 longitude,
                 description,
                 severity,
+                pothole_type,
                 status,
                 verify,
                 images (
@@ -313,16 +316,17 @@ export const verifyPotholeWithSeverity = async (req, res) => {
         const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
         const imageBase64 = imageBufferToBase64(imageBuffer, 'image/jpeg');
         
-        // Detect severity using Gemini
-        console.log(`[Backend] Detecting severity for pothole ${id}...`);
-        const detectedSeverity = await detectPotholeSeverity(imageBase64, 'image/jpeg');
+        // Detect severity and type using Gemini
+        console.log(`[Backend] Detecting severity and type for pothole ${id}...`);
+        const { severity: detectedSeverity, type: detectedType } = await detectPotholeSeverityAndType(imageBase64, 'image/jpeg');
         
-        // Update the pothole with verification and detected severity
+        // Update the pothole with verification, detected severity, and type
         const { data: updatedData, error: updateError } = await supabase
             .from('potholes')
             .update({ 
                 verify: true,
-                severity: detectedSeverity
+                severity: detectedSeverity,
+                pothole_type: detectedType
             })
             .eq('id', id)
             .select()
@@ -748,22 +752,24 @@ export const detectSeverityFromImage = async (req, res) => {
         const imageBuffer = imageFile.buffer;
         const imageBase64 = imageBufferToBase64(imageBuffer, imageFile.mimetype);
         
-        // Detect severity using Gemini
-        console.log(`[Backend] Detecting severity from uploaded image...`);
-        const detectedSeverity = await detectPotholeSeverity(imageBase64, imageFile.mimetype);
+        // Detect severity and type using Gemini
+        console.log(`[Backend] Detecting severity and type from uploaded image...`);
+        const { severity: detectedSeverity, type: detectedType } = await detectPotholeSeverityAndType(imageBase64, imageFile.mimetype);
         
         res.status(200).json({ 
             success: true,
             severity: detectedSeverity,
-            message: 'Severity detected successfully'
+            type: detectedType,
+            message: 'Severity and type detected successfully'
         });
 
     } catch (error) {
         console.error('Error detecting severity from image:', error);
         res.status(500).json({ 
             success: false,
-            error: 'Failed to detect severity',
-            severity: 'Medium' // Fallback severity
+            error: 'Failed to detect severity and type',
+            severity: 'Medium', // Fallback severity
+            type: 'Standard road damage' // Fallback type
         });
     }
 };

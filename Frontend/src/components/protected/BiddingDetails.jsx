@@ -281,7 +281,12 @@ const BiddingDetails = () => {
                             </>
                         )}
                     </div>
-                    <span className={`px-3 py-1 text-xs self-start font-bold rounded-full ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700" : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>{selectedPothole.severity} Severity</span>
+                    <div className="flex flex-col gap-2 self-start">
+                        <span className={`px-3 py-1 text-xs font-bold rounded-full ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700" : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>{selectedPothole.severity} Severity</span>
+                        {selectedPothole.pothole_type && (
+                            <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{selectedPothole.pothole_type}</span>
+                        )}
+                    </div>
                     <div className="border-t pt-3 space-y-2">
                         <div>
                             <p className="text-sm text-gray-700"><span className="font-semibold">Current Lowest Bid:</span> {selectedPothole.current_bid ? `₹${selectedPothole.current_bid.amount}` : "No bids yet"}</p>

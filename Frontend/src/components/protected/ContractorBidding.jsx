@@ -260,13 +260,18 @@ const ContractorBidding = () => {
                             </>
                         )}
                     </div>
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col gap-2">
                         <span className={`px-3 py-1 text-xs font-bold rounded-full 
               ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700"
                                 : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700"
                                     : "bg-green-100 text-green-700"}`}>
                             {selectedPothole.severity} Severity
                         </span>
+                        {selectedPothole.pothole_type && (
+                            <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                                {selectedPothole.pothole_type}
+                            </span>
+                        )}
                     </div>
                     <div className="border-t pt-3">
                         <p className="text-sm text-gray-700">

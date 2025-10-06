@@ -240,6 +240,13 @@ const PotholeMap = () => {
                             </div>
                         </div>
                         
+                        {selectedPothole.pothole_type && (
+                            <div className="pt-2 border-t">
+                                <p className="text-xs font-semibold text-gray-500">Type</p>
+                                <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{selectedPothole.pothole_type}</span>
+                            </div>
+                        )}
+                        
                         <div >
                             {selectedPothole.current_bid?.contracts?.[0]?.actual_end_date && (
                                 <div className="pt-2 border-t space-y-2">

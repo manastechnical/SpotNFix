@@ -63,6 +63,7 @@ const ReportPothole = () => {
     const [mlDetected, setMlDetected] = useState(null);
     const [mlDetections, setMlDetections] = useState([]);
     const [detectedSeverity, setDetectedSeverity] = useState(null);
+    const [detectedType, setDetectedType] = useState(null);
     const [address, setAddress] = useState("");
     const [isGeocoding, setIsGeocoding] = useState(false);
     const [nearbyPotholes, setNearbyPotholes] = useState([]);
@@ -249,6 +250,7 @@ const ReportPothole = () => {
             setMlDetected(null);
             setMlDetections([]);
             setDetectedSeverity(null);
+            setDetectedType(null);
             
             // First, detect potholes
             const formData = new FormData();
@@ -264,8 +266,8 @@ const ReportPothole = () => {
                 setMlDetections(data.detections || []);
                 
                 if (data.detected) {
-                    // If potholes detected, also detect severity
-                    console.log('[FE] Potholes detected, now detecting severity...');
+                    // If potholes detected, also detect severity and type
+                    console.log('[FE] Potholes detected, now detecting severity and type...');
                     const severityFormData = new FormData();
                     severityFormData.append('image', file);
                     
@@ -276,11 +278,14 @@ const ReportPothole = () => {
                         
                         if (severityResponse.data && severityResponse.data.success) {
                             setDetectedSeverity(severityResponse.data.severity);
+                            setDetectedType(severityResponse.data.type || 'Standard road damage');
                             console.log('[FE] Severity detected:', severityResponse.data.severity);
+                            console.log('[FE] Type detected:', severityResponse.data.type);
                         }
                     } catch (severityError) {
-                        console.error('[FE] Severity detection failed:', severityError);
+                        console.error('[FE] Severity and type detection failed:', severityError);
                         setDetectedSeverity('Medium'); // Fallback
+                        setDetectedType('Standard road damage'); // Fallback
                     }
                 } else {
                     toast.error('No potholes detected in the image. Please upload a valid pothole image.');
@@ -316,6 +321,7 @@ const ReportPothole = () => {
             formData.append("lat", lat);
             formData.append("lng", lng);
             formData.append("severity", detectedSeverity || severity);
+            formData.append("pothole_type", detectedType || 'Standard road damage');
             formData.append("user_id", userId);
             formData.append("media", mediaFiles[0]);
             try {
@@ -550,15 +556,25 @@ const ReportPothole = () => {
                                 <div className="mt-2">
                                     <p className="text-sm text-green-700">Potholes detected: {mlDetections.length}</p>
                                     {detectedSeverity && (
-                                        <div className="mt-2 flex items-center gap-2">
-                                            <span className={`px-3 py-1 text-xs font-bold rounded-full ${
-                                                detectedSeverity === "High" ? "bg-red-100 text-red-700" : 
-                                                detectedSeverity === "Medium" ? "bg-yellow-100 text-yellow-700" : 
-                                                "bg-green-100 text-green-700"
-                                            }`}>
-                                                Severity: {detectedSeverity}
-                                            </span>
-                                            <span className="text-xs text-gray-500">🤖 AI Detected</span>
+                                        <div className="mt-2 space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`px-3 py-1 text-xs font-bold rounded-full ${
+                                                    detectedSeverity === "High" ? "bg-red-100 text-red-700" : 
+                                                    detectedSeverity === "Medium" ? "bg-yellow-100 text-yellow-700" : 
+                                                    "bg-green-100 text-green-700"
+                                                }`}>
+                                                    Severity: {detectedSeverity}
+                                                </span>
+                                                <span className="text-xs text-gray-500">🤖 AI Detected</span>
+                                            </div>
+                                            {detectedType && (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                                                        Type: {detectedType}
+                                                    </span>
+                                                    <span className="text-xs text-gray-500">🤖 AI Detected</span>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -586,17 +602,27 @@ const ReportPothole = () => {
                                 ></textarea>
                             </div>
                             <div className="mt-4">
-                                <label className="block text-sm font-medium">Detected Severity</label>
+                                <label className="block text-sm font-medium">AI Analysis Results</label>
                                 {(detectedSeverity || severity) && (
-                                    <div className="mt-2 flex items-center gap-2">
-                                        <div className={`text-sm font-bold p-2 rounded-md inline-block ${(detectedSeverity || severity) === 'High' ? 'bg-red-100 text-red-800' :
-                                            (detectedSeverity || severity) === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                                                'bg-green-100 text-green-800'
-                                            }`}>
-                                            {detectedSeverity || severity}
+                                    <div className="mt-2 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`text-sm font-bold p-2 rounded-md inline-block ${(detectedSeverity || severity) === 'High' ? 'bg-red-100 text-red-800' :
+                                                (detectedSeverity || severity) === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                                    'bg-green-100 text-green-800'
+                                                }`}>
+                                                Severity: {detectedSeverity || severity}
+                                            </div>
+                                            {detectedSeverity && (
+                                                <span className="text-xs text-gray-500">🤖 AI Detected</span>
+                                            )}
                                         </div>
-                                        {detectedSeverity && (
-                                            <span className="text-xs text-gray-500">🤖 AI Detected</span>
+                                        {detectedType && (
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-sm font-medium p-2 rounded-md inline-block bg-blue-100 text-blue-800">
+                                                    Type: {detectedType}
+                                                </div>
+                                                <span className="text-xs text-gray-500">🤖 AI Detected</span>
+                                            </div>
                                         )}
                                     </div>
                                 )}
