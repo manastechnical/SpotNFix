@@ -91,21 +91,24 @@ export const acceptBid = async (req, res) => {
             .update({ status: 'under_review' })
             .eq('id', potholeId)
             .select(`
+                *,
+                bids (
                     *,
-                    users (id,email)
-            `);
+                    users (
+                        name,
+                        email
+                    )
+                )
+            `)
 
         if (potholeUpdateError) {
             throw potholeUpdateError;
         }
-        if (data[0]?.users?.email) {
 
+        if (data[0]?.bids[0]?.users?.email) {
             // Log the email for debugging
-            console.log("email", data[0].users.email);
-
-
-            await sendContractAssignEmail(data[0].users.email, data[0].description);
-
+            console.log("email", data[0].bids[0].users.email);
+            await sendContractAssignEmail(data[0].bids[0].users.email, data[0].description);
         } else {
             console.warn("Could not send email: User email not found in the data.");
         }
