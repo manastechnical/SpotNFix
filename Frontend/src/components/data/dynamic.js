@@ -1,4 +1,4 @@
-import { HomeIcon } from 'lucide-react';
+import { HomeIcon, MapIcon, CarIcon, Handshake, Building, Users } from 'lucide-react';
 
 const getFeatures = () => {
   const userData = JSON.parse(localStorage.getItem('account'));
@@ -13,13 +13,13 @@ const getFeatures = () => {
     {
       featureName: 'pd',
       displayName: 'Pothole Detection',
-      logoUsed: HomeIcon,
+      logoUsed: CarIcon,
       route: '/pd',
     },
     {
       featureName: 'map-view',
       displayName: 'Live Map',
-      logoUsed: HomeIcon,
+      logoUsed: MapIcon,
       route: '/map-view',
     },
   ];
@@ -27,13 +27,13 @@ const getFeatures = () => {
     features.push({
       featureName: 'contractor-bidding',
       displayName: 'Contractor Bidding',
-      logoUsed: HomeIcon,
+      logoUsed: Handshake,
       route: '/contractor-bidding',
     });
     features.push({
       featureName: 'bidding-details',
       displayName: 'Bidding Details',
-      logoUsed: HomeIcon,
+      logoUsed: Handshake,
       route: '/bidding-details',
     });
   }
@@ -41,7 +41,7 @@ const getFeatures = () => {
     features.push({
       featureName: 'approve-pothole',
       displayName: 'Approve Pothole',
-      logoUsed: HomeIcon,
+      logoUsed: Building,
       route: '/approve-pothole',
     });
   }
@@ -49,7 +49,7 @@ const getFeatures = () => {
     features.push({
       featureName: 'communities',
       displayName: 'Community',
-      logoUsed: HomeIcon,
+      logoUsed: Users,
       route: '/communities',
     });
   }

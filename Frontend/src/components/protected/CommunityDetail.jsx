@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import {toast} from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 import { selectAccount } from '../../app/DashboardSlice';
 import { FaArrowLeft, FaUsers, FaCalendarAlt, FaCrown, FaUserShield, FaUser, FaEllipsisV, FaTrash, FaPlus, FaCog, FaSave, FaTimes, FaEdit, FaShieldAlt, FaCalendarPlus, FaMapMarkerAlt, FaClock, FaUserFriends, FaCheckCircle } from 'react-icons/fa';
 import {
@@ -12,7 +12,6 @@ import {
     updateCommunityMemberRole,
     updateCommunityDetails,
     deleteCommunityById,
-    // --- REAL EVENT FUNCTIONS ---
     fetchCommunityEvents,
     createCommunityEvent,
     updateCommunityEvent,
@@ -21,6 +20,9 @@ import {
 } from '../../services/repository/userRepo';
 import Portal from '../utils/Portal';
 import ConfirmationModal from '../utils/ConfirmationModal';
+import { MapPin } from 'lucide-react';
+import MapSelectionModal from '../utils/MapSelectionModal';
+
 
 const ROLES = {
     admin: { icon: FaCrown, color: 'text-yellow-400', label: 'Admin' },
@@ -40,10 +42,11 @@ const EventModal = ({ isOpen, onClose, onSave, event }) => {
     const [eventData, setEventData] = useState({
         title: '',
         description: '',
-        location: '',
+        location: null, // Changed to null to handle object
         start_time: '',
         end_time: '',
     });
+    const [isMapModalOpen, setIsMapModalOpen] = useState(false); // Map modal state is now here
 
     // Get current time in YYYY-MM-DDTHH:MM format for the input min attribute
     const now = new Date();
@@ -56,13 +59,13 @@ const EventModal = ({ isOpen, onClose, onSave, event }) => {
             setEventData({
                 title: event.title,
                 description: event.description,
-                location: event.location,
+                location: event.location, // Assuming location is stored as an object {lat, lng} or string
                 start_time: event.start_time ? new Date(event.start_time).toISOString().slice(0, 16) : '',
                 end_time: event.end_time ? new Date(event.end_time).toISOString().slice(0, 16) : '',
             });
         } else {
             // Reset for creating
-            setEventData({ title: '', description: '', location: '', start_time: '', end_time: '' });
+            setEventData({ title: '', description: '', location: null, start_time: '', end_time: '' });
         }
     }, [event, isOpen]);
 
@@ -79,7 +82,13 @@ const EventModal = ({ isOpen, onClose, onSave, event }) => {
             return newData;
         });
     };
-    
+
+    const handleLocationSelect = (location) => {
+        setEventData({ ...eventData, location });
+        setIsMapModalOpen(false);
+    };
+
+
     const handleSubmit = (e) => {
         e.preventDefault();
         // Final validation check before saving
@@ -87,9 +96,11 @@ const EventModal = ({ isOpen, onClose, onSave, event }) => {
             toast.error("End time cannot be before the start time.");
             return;
         }
-        
+
         const dataToSave = {
             ...eventData,
+            // Convert location object to a string for display/storage if needed, or handle as object
+            location: eventData.location ? `Lat: ${eventData.location.lat.toFixed(4)}, Lng: ${eventData.location.lng.toFixed(4)}` : 'Location not set',
             start_time: new Date(eventData.start_time).toISOString(),
             end_time: eventData.end_time ? new Date(eventData.end_time).toISOString() : null,
         };
@@ -105,16 +116,26 @@ const EventModal = ({ isOpen, onClose, onSave, event }) => {
                         <div className="space-y-4">
                             <input name="title" value={eventData.title} onChange={handleChange} placeholder="Event Title" className="input-field" required />
                             <textarea name="description" value={eventData.description} onChange={handleChange} placeholder="Description" className="input-field h-24" required />
-                            <input name="location" value={eventData.location} onChange={handleChange} placeholder="Location (e.g., 'Central Park' or 'Zoom Link')" className="input-field" required />
                             <div>
-                               <label className="block text-sm font-medium text-gray-400 mb-1">Start Time</label>
-                               {/* **VALIDATION**: Cannot select a past date/time */}
-                               <input name="start_time" value={eventData.start_time} onChange={handleChange} type="datetime-local" className="input-field" required min={minDateTime} />
+                                <label className="block text-sm font-medium text-gray-400 mb-1">
+                                    Location
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsMapModalOpen(true)}
+                                    className="mt-1 w-full flex items-center justify-center px-4 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-200 bg-[#2a2a2a] hover:bg-gray-700"
+                                >
+                                    <MapPin className="mr-2 h-5 w-5" />
+                                    {eventData.location ? `Lat: ${eventData.location.lat.toFixed(4)}, Lng: ${eventData.location.lng.toFixed(4)}` : 'Choose on Map'}
+                                </button>
                             </div>
-                             <div>
-                               <label className="block text-sm font-medium text-gray-400 mb-1">End Time (Optional)</label>
-                               {/* **VALIDATION**: End time must be after start time */}
-                               <input name="end_time" value={eventData.end_time} onChange={handleChange} type="datetime-local" className="input-field" min={eventData.start_time || minDateTime} disabled={!eventData.start_time} />
+                            <div>
+                                <label className="block text-sm font-medium text-gray-400 mb-1">Start Time</label>
+                                <input name="start_time" value={eventData.start_time} onChange={handleChange} type="datetime-local" className="input-field" required min={minDateTime} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-400 mb-1">End Time (Optional)</label>
+                                <input name="end_time" value={eventData.end_time} onChange={handleChange} type="datetime-local" className="input-field" min={eventData.start_time || minDateTime} disabled={!eventData.start_time} />
                             </div>
                         </div>
                         <div className="flex justify-end gap-3 mt-6">
@@ -124,6 +145,12 @@ const EventModal = ({ isOpen, onClose, onSave, event }) => {
                     </form>
                 </div>
             </div>
+            {isMapModalOpen && (
+                <MapSelectionModal
+                    onClose={() => setIsMapModalOpen(false)}
+                    onSelectLocation={handleLocationSelect}
+                />
+            )}
         </Portal>
     );
 };
@@ -182,7 +209,7 @@ const CommunityDetail = () => {
     const [editData, setEditData] = useState({ name: '', description: '' });
     const [modalState, setModalState] = useState({ isOpen: false });
     const account = useSelector(selectAccount);
-    
+
     // --- STATE FOR EVENTS ---
     const [events, setEvents] = useState([]);
     const [isEventsLoading, setIsEventsLoading] = useState(false);
@@ -241,7 +268,7 @@ const CommunityDetail = () => {
                 fetchCommunityData();
                 // fetchEventsData();
             }
-        }, 5000); // 20 seconds polling
+        }, 20000); // 20 seconds polling
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
@@ -271,7 +298,7 @@ const CommunityDetail = () => {
             pastEvents: past,
         };
     }, [community, account, events]);
-    
+
     // --- EVENT HANDLERS ---
 
     const handleSaveEvent = async (eventData) => {
@@ -293,7 +320,7 @@ const CommunityDetail = () => {
             toast.dismiss(toastId);
         }
     };
-    
+
     const handleDeleteEvent = (eventId) => {
         setModalState({
             isOpen: true,
@@ -315,19 +342,19 @@ const CommunityDetail = () => {
             }
         });
     };
-    
-     const handleRsvp = async (eventId, isRsvping) => {
+
+    const handleRsvp = async (eventId, isRsvping) => {
         const originalEvents = [...events];
         setEvents(prevEvents => prevEvents.map(event => {
             if (event.id === eventId) {
-                const newAttendees = isRsvping 
-                ? [...event.attendees, account]
-                : event.attendees.filter(user => user.id !== account.id);
+                const newAttendees = isRsvping
+                    ? [...event.attendees, account]
+                    : event.attendees.filter(user => user.id !== account.id);
                 return { ...event, attendees: newAttendees };
             }
             return event;
         }));
-        
+
         try {
             console.log(account.id)
             // **FIX**: Pass the user's ID in the request body
@@ -398,7 +425,7 @@ const CommunityDetail = () => {
         await updateCommunityMemberRole(id, memberId, newRole);
         fetchCommunityData();
     };
-    
+
     const handleDeleteCommunity = () => {
         setModalState({
             isOpen: true,
@@ -426,11 +453,11 @@ const CommunityDetail = () => {
     return (
         <div className="p-4 sm:p-6 text-white min-h-full">
             <ConfirmationModal {...modalState} onClose={() => setModalState({ isOpen: false })} />
-            <EventModal 
-                isOpen={eventModal.isOpen} 
-                onClose={() => setEventModal({ isOpen: false, event: null })} 
+            <EventModal
+                isOpen={eventModal.isOpen}
+                onClose={() => setEventModal({ isOpen: false, event: null })}
                 onSave={handleSaveEvent}
-                event={eventModal.event} 
+                event={eventModal.event}
             />
             {attendeesModal.isOpen && (
                 <Portal>
@@ -440,8 +467,16 @@ const CommunityDetail = () => {
                             <ul className="space-y-3">
                                 {attendeesModal.attendees.map(attendee => (
                                     <li key={attendee.id} className="flex items-center bg-[#2a2a2a] p-3 rounded-lg">
-                                        <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center font-bold mr-4 flex-shrink-0">{attendee.name.charAt(0).toUpperCase()}</div>
-                                        <span className="text-white truncate">{attendee.id === account.id ? "You" : attendee.name}</span>
+                                        <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center font-bold mr-4 flex-shrink-0">
+                                            {/* --- FIX STARTS HERE --- */}
+                                            {(attendee && attendee.name) ? attendee.name.charAt(0).toUpperCase() : '?'}
+                                            {/* --- FIX ENDS HERE --- */}
+                                        </div>
+                                        {/* --- FIX STARTS HERE --- */}
+                                        <span className="text-white truncate">
+                                            {(attendee && attendee.id === account.id) ? "You" : (attendee?.name || 'Unknown User')}
+                                        </span>
+                                        {/* --- FIX ENDS HERE --- */}
                                     </li>
                                 ))}
                             </ul>
@@ -458,11 +493,11 @@ const CommunityDetail = () => {
             <header className="bg-[#1e1e1e] p-6 rounded-lg mb-6">
                 {isEditing && userRole === 'admin' ? (
                     <div>
-                        <input type="text" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} className="input-field text-4xl font-bold mb-2 w-full" />
-                        <textarea value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} className="input-field w-full h-24" />
+                        <input type="text" value={editData.name} onChange={e => setEditData({ ...editData, name: e.target.value })} className="input-field text-4xl font-bold mb-2 w-full" />
+                        <textarea value={editData.description} onChange={e => setEditData({ ...editData, description: e.target.value })} className="input-field w-full h-24" />
                         <div className="flex gap-2 mt-4">
-                            <button onClick={handleSaveDetails} className="button-primary"><FaSave className="mr-2"/>Save</button>
-                            <button onClick={() => setIsEditing(false)} className="button-secondary"><FaTimes className="mr-2"/>Cancel</button>
+                            <button onClick={handleSaveDetails} className="button-primary"><FaSave className="mr-2" />Save</button>
+                            <button onClick={() => setIsEditing(false)} className="button-secondary"><FaTimes className="mr-2" />Cancel</button>
                         </div>
                     </div>
                 ) : (
@@ -472,8 +507,8 @@ const CommunityDetail = () => {
                             <p className="text-gray-400 max-w-3xl">{community.description}</p>
                         </div>
                         <div className="flex gap-2 flex-shrink-0 mt-4 sm:mt-0">
-                           {userRole === 'admin' && <button onClick={() => setIsEditing(true)} className="button-icon"><FaEdit /></button>}
-                           {currentUserMembership ? <button onClick={handleLeave} className="button-danger">Leave</button> : <button onClick={handleJoin} className="button-primary">Join</button>}
+                            {userRole === 'admin' && <button onClick={() => setIsEditing(true)} className="button-icon"><FaEdit /></button>}
+                            {currentUserMembership ? <button onClick={handleLeave} className="button-danger">Leave</button> : <button onClick={handleJoin} className="button-primary">Join</button>}
                         </div>
                     </div>
                 )}
@@ -503,22 +538,22 @@ const CommunityDetail = () => {
                     </ul>
                 </div>
             )}
-            
+
             {activeTab === 'events' && (
                 <div className="bg-[#1e1e1e] p-6 rounded-lg animate-fade-in-up">
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-2xl font-bold">Upcoming Events</h2>
                         {canManage && (
-                           <button onClick={() => setEventModal({ isOpen: true, event: null })} className="button-primary flex items-center">
-                               <FaCalendarPlus className="sm:mr-2" /> <span className='hidden sm:block'>Create Event</span>
-                           </button>
+                            <button onClick={() => setEventModal({ isOpen: true, event: null })} className="button-primary flex items-center">
+                                <FaCalendarPlus className="sm:mr-2" /> <span className='hidden sm:block'>Create Event</span>
+                            </button>
                         )}
                     </div>
                     {isEventsLoading ? <div className="text-center py-8">Loading events...</div> : (
                         upcomingEvents.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {upcomingEvents.map(event => (
-                                    <EventCard 
+                                    <EventCard
                                         key={event.id}
                                         event={event}
                                         onRsvp={handleRsvp}
@@ -545,7 +580,7 @@ const CommunityDetail = () => {
                         pastEvents.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {pastEvents.map(event => (
-                                    <EventCard 
+                                    <EventCard
                                         key={event.id}
                                         event={event}
                                         onRsvp={handleRsvp}
@@ -564,7 +599,7 @@ const CommunityDetail = () => {
                     )}
                 </div>
             )}
-            
+
             {activeTab === 'manage' && userRole === 'admin' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in-up">
                     <div className="bg-[#1e1e1e] p-6 rounded-lg">
@@ -573,13 +608,13 @@ const CommunityDetail = () => {
                             {community.members.map((member) => (
                                 <li key={member.user.id} className="flex items-center justify-between bg-[#2a2a2a] p-2 rounded-lg">
                                     <span className="text-white">{member.user.id === account.id ? "You" : member.user.name}</span>
-                                    {member.user.id !== account.id ? <MemberActionsDropdown member={member} currentUserRole={userRole} onRoleChange={handleRoleChange} onRemove={handleRemoveMember}/> : <span className={`role-badge ${ROLES[member.role].color}`}>{ROLES[member.role].label}</span>}
+                                    {member.user.id !== account.id ? <MemberActionsDropdown member={member} currentUserRole={userRole} onRoleChange={handleRoleChange} onRemove={handleRemoveMember} /> : <span className={`role-badge ${ROLES[member.role].color}`}>{ROLES[member.role].label}</span>}
                                 </li>
                             ))}
                         </ul>
                     </div>
                     <div className="bg-[#1e1e1e] p-6 rounded-lg">
-                        <h3 className="text-xl font-semibold mb-3 flex items-center"><FaShieldAlt className="mr-2 text-yellow-400"/>Admin Settings</h3>
+                        <h3 className="text-xl font-semibold mb-3 flex items-center"><FaShieldAlt className="mr-2 text-yellow-400" />Admin Settings</h3>
                         <div className="mt-4 p-4 rounded-lg border-2 border-red-500/30 bg-red-900/20">
                             <h4 className="font-bold text-red-400">Danger Zone</h4>
                             <p className="text-sm text-gray-400 mt-1 mb-3">This action is permanent and cannot be undone.</p>
