@@ -168,7 +168,7 @@ const ApprovePothole = () => {
         setIsUpdating(true);
         const toastId = toast.loading("Verifying and detecting severity...");
         try {
-            const response = await apiConnector("patch", `${potholeEndpoints.VERIFY_POTHOLE_WITH_SEVERITY}/${potholeId}`, {});
+            const response = await apiConnector("patch", `${potholeEndpoints.VERIFY_POTHOLE}/${potholeId}`, {});
             const detectedSeverity = response.data?.detectedSeverity;
             
             if (detectedSeverity) {
