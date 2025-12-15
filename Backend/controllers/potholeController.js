@@ -5,6 +5,7 @@ import { sendPotholeStatusEmail } from '../utils/sendPotholeStatusEmail.js';
 import { sendPotholeFixedEmail } from '../utils/sendPotholeFixedEmail.js';
 import { sendRepairRejectedEmail } from '../utils/sendRepairRejectedEmail.js';
 import { sendPotholeReappearedEmail } from '../utils/sendPotholeReappearedEmail.js';
+import { sendBlacklistEmail } from '../utils/sendBlacklistEmail.js';
 
 export const checkNearbyPotholes = async (req, res) => {
     const { lat, lng, radius } = req.query;
@@ -306,24 +307,24 @@ export const verifyPotholeWithSeverity = async (req, res) => {
 
         // Get the first image URL
         const imageUrl = potholeData.images[0].image_url;
-        
+
         // Fetch the image from Supabase storage
         const imageResponse = await fetch(imageUrl);
         if (!imageResponse.ok) {
             throw new Error(`Failed to fetch image: ${imageResponse.statusText}`);
         }
-        
+
         const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
         const imageBase64 = imageBufferToBase64(imageBuffer, 'image/jpeg');
-        
+
         // Detect severity and type using Gemini
         console.log(`[Backend] Detecting severity and type for pothole ${id}...`);
         const { severity: detectedSeverity, type: detectedType } = await detectPotholeSeverityAndType(imageBase64, 'image/jpeg');
-        
+
         // Update the pothole with verification, detected severity, and type
         const { data: updatedData, error: updateError } = await supabase
             .from('potholes')
-            .update({ 
+            .update({
                 verify: true,
                 severity: detectedSeverity,
                 pothole_type: detectedType
@@ -336,8 +337,8 @@ export const verifyPotholeWithSeverity = async (req, res) => {
             throw updateError;
         }
 
-        res.status(200).json({ 
-            message: 'Pothole verified and severity detected successfully!', 
+        res.status(200).json({
+            message: 'Pothole verified and severity detected successfully!',
             data: updatedData,
             detectedSeverity: detectedSeverity
         });
@@ -431,23 +432,54 @@ export const finalizePotholeRepair = async (req, res) => {
     }
 };
 
-export const rejectPotholeRepair = async (req, res) => {
-    const { id } = req.params; // This is the contract ID from the URL
+const getIdsToDelete = (bids) => {
+    // We use reduce to accumulate just the IDs that match your logic
+    return bids.reduce((acc, bid) => {
 
+        // 1. CHECK: Is the bid pending?
+        if (bid.status === 'pending') {
+            acc.push(bid.pothole_id);
+        }
+
+        // 2. CHECK: Is the bid accepted?
+        else if (bid.status === 'accepted') {
+            // If accepted, check inside the contracts array for 'ongoing' status
+            const hasOngoingContract = bid.contracts && bid.contracts.some(
+                (contract) => contract.status === 'ongoing' || contract.status === 'penalized'
+            );
+
+            // If we found an ongoing contract, add the ID to our list
+            if (hasOngoingContract) {
+                acc.push(bid.pothole_id);
+            }
+        }
+
+        return acc;
+    }, []);
+};
+
+export const rejectPotholeRepair = async (req, res) => {
+    const { id } = req.params;
+
+    // Validation
     if (!id) {
         return res.status(400).json({ error: 'Contract ID is required.' });
     }
 
     try {
-        // Step 1: Update contract and get the associated contractor_id
+        // --- STEP 1: Update Contract & Get Contractor Info ---
+        // We do this in ONE query to avoid multiple database calls.
         const { data: contractData, error: contractError } = await supabase
             .from('contracts')
-            .update({ status: 'ongoing' })
+            .update({ status: 'penalized' }) // Status updated to 'rejected'
             .eq('id', id)
-            .select(`*, bids(contractor_id,            
-                users (
-                email
-            ))`)
+            .select(`
+                *, 
+                bids (
+                    contractor_id,            
+                    users ( email )
+                )
+            `)
             .single();
 
         if (contractError) {
@@ -457,71 +489,124 @@ export const rejectPotholeRepair = async (req, res) => {
             throw contractError;
         }
 
-        if (contractData?.bids?.users?.email) {
-            console.log("email", contractData.bids.users.email);
-
-            const contractorEmail = contractData.bids.users.email;
-            const potholeDescription = "";
-
-            await sendRepairRejectedEmail(contractorEmail, potholeDescription);
-
-        } else {
-            console.warn("Could not send 'repair rejected' email: Contractor email not found.");
-        }
+        // Extract contractor details safely
         const contractorId = contractData.bids?.contractor_id;
+        const contractorEmail = contractData.bids?.users?.email;
+
         if (!contractorId) {
             return res.status(404).json({ error: 'Could not find the contractor for this contract.' });
         }
 
-        // Step 2: Manually increment the contractor's penalty count
+        // Send Email (Fire-and-forget: don't await if you don't want to block the response)
+        if (contractorEmail) {
+            // Ensure this function exists in your codebase
+            await sendRepairRejectedEmail(contractorEmail, "");
+        } else {
+            console.warn("Could not send email: Contractor email not found.");
+        }
 
-        // 2a. First, READ the current penalty count
-        const { data: contractorDetails, error: fetchError } = await supabase
+
+        // --- STEP 2: Handle Penalties ---
+
+        // 2a. Fetch current penalty count
+        const { data: contractorDetails } = await supabase
             .from('contractor_details')
             .select('no_of_penalty')
             .eq('user_id', contractorId)
             .single();
 
-        if (fetchError) {
-            console.error('Failed to fetch penalty count:', fetchError);
-            // Even if this fails, we should still proceed with rejecting the repair
-        }
-
-        // 2b. Then, WRITE the new incremented value
         const currentPenalties = contractorDetails?.no_of_penalty || 0;
+        const newPenaltyCount = currentPenalties + 1;
+
+        // 2b. Increment penalty count
         const { error: updateError } = await supabase
             .from('contractor_details')
-            .update({ no_of_penalty: currentPenalties + 1 })
+            .update({ no_of_penalty: newPenaltyCount })
             .eq('user_id', contractorId);
 
-        if (updateError) {
-            // Log this error but do not stop the process, as the main rejection is more critical
-            console.error('Failed to update penalty count:', updateError);
+        if (updateError) console.error('Failed to update penalty count:', updateError);
+
+
+        // --- STEP 3: Check for Blacklisting ---
+        let finalMessage = 'Contract has been penalized.';
+        let isBlacklisted = false;
+
+        // If penalties exceed limit, blacklist the user
+        if (newPenaltyCount >= 10) {
+            const { error: blacklistError } = await supabase
+                .from('users')
+                .update({ verify: 'blacklisted' })
+                .eq('id', contractorId);
+
+            if (!blacklistError) {
+                isBlacklisted = true;
+                finalMessage = 'Contractor has been penalized and BLACKLISTED.';
+            }
+            // --- STEP 4: Fetch All Bids for Contractor ---
+            // This is the variable that was missing/scoped incorrectly in your original code.
+            // We fetch it here so it is available for the final response.
+            const { data: bidsData, error: bidsError } = await supabase
+                .from('bids')
+                .select(`
+                    *,
+                    contracts ( status, start_date, expected_end_date )
+                `)
+                .eq('contractor_id', contractorId);
+
+            if (bidsError) console.error("Error fetching bids:", bidsError);
+            console.log(bidsData, "biddata");
+            console.log(bidsData[0].contracts, "contracts");
+            const potholeIdsToDelete = getIdsToDelete(bidsData);
+
+            console.log("List of Pothole IDs to delete:", potholeIdsToDelete);
+            if (potholeIdsToDelete.length > 0) {
+                const { error: deleteError } = await supabase
+                    .from('bids')
+                    .delete()
+                    .in('pothole_id', potholeIdsToDelete); // Pass the WHOLE array here
+
+                if (deleteError) {
+                    console.error('Error deleting bids:', deleteError.message);
+                } else {
+                    console.log('Bids deleted successfully.');
+                }
+            }
+            if (potholeIdsToDelete.length > 0) {
+                const { data, error } = await supabase
+                    .from('potholes')
+                    .update({ status: 'reported' })      // 1. Set the new status
+                    .in('id', potholeIdsToDelete)        // 2. Filter by your list of IDs
+                    .eq('status', 'under_review');       // 3. (Optional) Strict check: only update if currently 'under_review'
+
+                if (error) {
+                    console.error('Error updating potholes:', error.message);
+                } else {
+                    console.log('Potholes reset to reported successfully.');
+                }
+            }
         }
 
-        // Step 3: Fetch the contractor's email from the 'users' table
-        const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('email')
-            .eq('id', contractorId)
-            .single();
 
-        if (userError) {
-            console.error('Failed to fetch contractor email:', userError);
-        }
 
-        const contractorEmail = userData ? userData.email : null;
 
-        // Step 4: Send the final success response
-        res.status(200).json({
-            message: 'Pothole repair rejected and contractor penalized.',
+        // --- STEP 5: Send ONE Final Response ---
+        // This is the only place we send a response, preventing "Headers already sent" errors.
+        var bidsData = [];
+        return res.status(200).json({
+            message: finalMessage,
             contract: contractData,
-            contractorEmail: contractorEmail
+            contractorBids: bidsData,
+            contractorEmail: contractorEmail,
+            blacklisted: isBlacklisted
         });
 
     } catch (error) {
         console.error('Error rejecting pothole repair:', error.message);
-        res.status(500).json({ error: 'An unexpected error occurred on the server.' });
+
+        // Safety check: Don't try to send error if success response was already sent
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'An unexpected error occurred on the server.' });
+        }
     }
 };
 
@@ -651,27 +736,29 @@ export const penalizeReopen = async (req, res) => {
     if (!id) {
         return res.status(400).json({ error: 'Contract ID is required.' });
     }
-
+    var contractorEmail="";
     try {
         // Find the contract by its ID and update its status to 'penalized'.
         const { data, error } = await supabase
             .from('contracts')
             .update({ status: 'penalized' }) // Status is now 'penalized'
             .eq('id', id)
-            .select(`*, bids(contractor_id,            
+            .select(`*, bids(contractor_id,pothole_id,            
                 users (
                 email
             ))`)
             .single();
-
+        let contractData = data;
+        console.log(data, "contract data");
+        const potholeID=data?.bids?.pothole_id;
         if (data?.bids?.users?.email) {
 
-            const contractorEmail = data.bids.users.email;
+            contractorEmail = data.bids.users.email;
             const potholeDescription = "";
 
             console.log("Found contractor email:", contractorEmail);
 
-            await sendPotholeReappearedEmail(contractorEmail, potholeDescription);
+            sendPotholeReappearedEmail(contractorEmail, potholeDescription);
 
         } else {
             console.warn("Could not send 'pothole reappeared' email: Required data (email or description) is missing.");
@@ -715,24 +802,94 @@ export const penalizeReopen = async (req, res) => {
             console.error('Failed to update penalty count:', updateError);
         }
 
-        // Step 3: Fetch the contractor's email from the 'users' table
-        const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('email')
-            .eq('id', contractorId)
+        if (currentPenalties + 1 >= 10) {
+            const { data: userData, error: userError } = await supabase
+                .from('users')
+                .update({ verify: 'blacklisted' }) // 1. Perform the update
+                .eq('id', contractorId)            // 2. Target the specific user
+                .select('email')                   // 3. Return ONLY the email of the updated record
+                .single();
+            if (userError) {
+                console.error('Failed to fetch contractor email:', userError);
+            }
+
+            const contractorEmail = userData ? userData.email : null;
+
+            const { data: bidsData, error: bidsError } = await supabase
+                .from('bids')
+                .select(`
+                    *,
+                    contracts ( status, start_date, expected_end_date )
+                `)
+                .eq('contractor_id', contractorId);
+
+            if (bidsError) console.error("Error fetching bids:", bidsError);
+            console.log(bidsData, "biddata");
+            console.log(bidsData[0].contracts, "contracts");
+            const potholeIdsToDelete = getIdsToDelete(bidsData);
+
+            console.log("List of Pothole IDs to delete:", potholeIdsToDelete);
+            if (potholeIdsToDelete.length > 0) {
+                const { error: deleteError } = await supabase
+                    .from('bids')
+                    .delete()
+                    .in('pothole_id', potholeIdsToDelete); // Pass the WHOLE array here
+
+                if (deleteError) {
+                    console.error('Error deleting bids:', deleteError.message);
+                } else {
+                    console.log('Bids deleted successfully.');
+                }
+            }
+            if (potholeIdsToDelete.length > 0) {
+                const { data, error } = await supabase
+                    .from('potholes')
+                    .update({ status: 'reported' })      // 1. Set the new status
+                    .in('id', potholeIdsToDelete)        // 2. Filter by your list of IDs
+                    .eq('status', 'under_review');       // 3. (Optional) Strict check: only update if currently 'under_review'
+
+                if (error) {
+                    console.error('Error updating potholes:', error.message);
+                } else {
+                    console.log('Potholes reset to reported successfully.');
+                }
+            }
+            const { data: potholeData, error: potholeError } = await supabase
+            .from('potholes')
+            .update({ status: 'reported' })
+            .eq('id', potholeID)
+            .select()
             .single();
+            if(potholeError)
+                console.error('Error updating pothole status:', potholeError.message);
 
-        if (userError) {
-            console.error('Failed to fetch contractor email:', userError);
+            sendBlacklistEmail(contractorEmail,"");
         }
-
-        const contractorEmail = userData ? userData.email : null;
-
-        // Send the updated contract data back as a success response.
         res.status(200).json({
             message: 'Contract has been penalized.',
-            contract: data,
+            contract: contractData,
         });
+        // else {
+
+        //     // Step 3: Fetch the contractor's email from the 'users' table
+        //     const { data: userData, error: userError } = await supabase
+        //         .from('users')
+        //         .select('email')
+        //         .eq('id', contractorId)
+        //         .single();
+        //     if (userError) {
+        //         console.error('Failed to fetch contractor email:', userError);
+        //     }
+
+        //     const contractorEmail = userData ? userData.email : null;
+
+        //     // Send the updated contract data back as a success response.
+        //     res.status(200).json({
+        //         message: 'Contract has been penalized.',
+        //         contract: data,
+        //     });
+        // }
+
 
     } catch (error) {
         console.error('Error penalizing contract:', error.message);
@@ -751,12 +908,12 @@ export const detectSeverityFromImage = async (req, res) => {
         const imageFile = req.file;
         const imageBuffer = imageFile.buffer;
         const imageBase64 = imageBufferToBase64(imageBuffer, imageFile.mimetype);
-        
+
         // Detect severity and type using Gemini
         console.log(`[Backend] Detecting severity and type from uploaded image...`);
         const { severity: detectedSeverity, type: detectedType } = await detectPotholeSeverityAndType(imageBase64, imageFile.mimetype);
-        
-        res.status(200).json({ 
+
+        res.status(200).json({
             success: true,
             severity: detectedSeverity,
             type: detectedType,
@@ -765,7 +922,7 @@ export const detectSeverityFromImage = async (req, res) => {
 
     } catch (error) {
         console.error('Error detecting severity from image:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             error: 'Failed to detect severity and type',
             severity: 'Medium', // Fallback severity

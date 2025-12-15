@@ -160,7 +160,10 @@ const ContractorBidding = () => {
             fetchPotholes();
         } catch (error) {
             console.error("Failed to submit bid:", error);
-            toast.error("Failed to place bid. Please try again.");
+            if(error.response.data.error=="User is blacklisted")
+                toast.error("You are blacklisted and cannot place bids.");
+            else
+                toast.error("Failed to place bid. Please try again.");
         }
     };
 

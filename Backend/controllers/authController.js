@@ -7,7 +7,7 @@ import axios from 'axios';
 import fs from 'fs';
 import { promisify } from 'util';
 import { sendPasswordResetEmail } from '../utils/sendPasswordResetEmail.js';
-import crypto from 'crypto'; 
+import crypto from 'crypto';
 
 const unlinkAsync = promisify(fs.unlink);
 const readFileAsync = promisify(fs.readFile);
@@ -63,7 +63,7 @@ export const registerUser = async (req, res) => {
             console.error('Insert error:', insertError);
             throw insertError;
         }
-        GLOBAL_OTP = ""+Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
+        GLOBAL_OTP = "" + Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
         await sendOtpEmail(email_id, GLOBAL_OTP);
 
         return res.status(201).json({
@@ -161,7 +161,7 @@ export const resendOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'User already verified' });
         }
         // Send OTP email
-        GLOBAL_OTP = ""+Math.floor(100000 + Math.random() * 900000); // Generate a new 6-digit OTP
+        GLOBAL_OTP = "" + Math.floor(100000 + Math.random() * 900000); // Generate a new 6-digit OTP
         await sendOtpEmail(user.email, GLOBAL_OTP);
 
         return res.status(200).json({ success: true, message: 'OTP resent successfully' });
@@ -190,11 +190,13 @@ export const login = async (req, res) => {
         }
 
         // Check if user is verified
-        if (userData.verify !== 'verified') {
+        if (userData.verify === 'unverified') {
             return res.status(401).json({ success: false, message: 'Email not verified' });
+        }else if (userData.verify === 'blacklisted') {
+            return res.status(401).json({ success: false, message: 'Account has been blacklisted contact admin' });
         }
 
-         // 2. NEW FIX: Check if contractors or officials have been approved by an admin
+        // 2. NEW FIX: Check if contractors or officials have been approved by an admin
         if (userData.role === 'contractor' || userData.role === 'government') {
             if (userData.status !== 'approved') {
                 let message = 'Your account is still pending admin approval.';
@@ -270,20 +272,22 @@ export const signInWithGoogle = async (req, res) => {
                         message = 'Your registration has been rejected by the admin.';
                     }
                     return res.status(403).json({ success: false, message });
+                }else if(existingUser.verify ==='blacklisted'){
+                    return res.status(401).json({ success: false, message: 'Account has been blacklisted contact admin' });
                 }
             }
 
             // If the user is a citizen OR an approved contractor/official, log them in
-            return res.json({ 
-                success: true, 
-                data: { 
-                    u_id: existingUser.id, 
-                    name: existingUser.name, 
-                    email: existingUser.email, 
-                    role: existingUser.role, 
-                    isNew: false 
-                }, 
-                message: "User found" 
+            return res.json({
+                success: true,
+                data: {
+                    u_id: existingUser.id,
+                    name: existingUser.name,
+                    email: existingUser.email,
+                    role: existingUser.role,
+                    isNew: false
+                },
+                message: "User found"
             });
         }
 
@@ -291,12 +295,12 @@ export const signInWithGoogle = async (req, res) => {
         // This flow assumes that only citizens can be created instantly via Google Sign-In.
         const { data: newUser, error: insertError } = await supabase
             .from("users")
-            .insert([{ 
-                email, 
-                name: name, 
-                phone: '', 
-                role: 'citizen', 
-                verify: 'verified', 
+            .insert([{
+                email,
+                name: name,
+                phone: '',
+                role: 'citizen',
+                verify: 'verified',
                 status: 'approved', // Citizens are auto-approved
                 password: '123456'  // Placeholder password
             }])
@@ -305,16 +309,16 @@ export const signInWithGoogle = async (req, res) => {
 
         if (insertError) throw insertError;
 
-        res.json({ 
-            success: true, 
-            data: { 
-                u_id: newUser.id, 
-                name: newUser.name, 
-                email: newUser.email, 
-                role: newUser.role, 
-                isNew: false 
-            }, 
-            message: "New user created" 
+        res.json({
+            success: true,
+            data: {
+                u_id: newUser.id,
+                name: newUser.name,
+                email: newUser.email,
+                role: newUser.role,
+                isNew: false
+            },
+            message: "New user created"
         });
 
     } catch (error) {
@@ -346,10 +350,10 @@ export const registerContractor = [
             if (existingUser) {
                 return res.status(409).json({ success: false, message: 'An account with this email already exists.' });
             }
-            
+
             const panCard = req.files.panCard[0];
-        const aadhaarCard = req.files.aadhaarCard[0];
-        const gstCertificate = req.files.gstCertificate[0];
+            const aadhaarCard = req.files.aadhaarCard[0];
+            const gstCertificate = req.files.gstCertificate[0];
             // 1. Create the user in the 'users' table
             const { data: newUser, error: userError } = await supabase.from('users').insert([{
                 name,
@@ -374,7 +378,7 @@ export const registerContractor = [
             const aadhaarCardPath = `public/contractor-documents/${newUser.id}/aadhaar_card.pdf`;
             const gstCertificatePath = `public/contractor-documents/${newUser.id}/gst_certificate.pdf`;
 
-             const [panUpload, aadhaarUpload, gstUpload] = await Promise.all([
+            const [panUpload, aadhaarUpload, gstUpload] = await Promise.all([
                 supabase.storage.from('documents').upload(panCardPath, panBuffer, { contentType: 'application/pdf' }),
                 supabase.storage.from('documents').upload(aadhaarCardPath, aadhaarBuffer, { contentType: 'application/pdf' }),
                 supabase.storage.from('documents').upload(gstCertificatePath, gstBuffer, { contentType: 'application/pdf' })
@@ -404,14 +408,14 @@ export const registerContractor = [
                 unlinkAsync(aadhaarCard.path),
                 unlinkAsync(gstCertificate.path)
             ]);
-            
+
             // 5. Send OTP for email verification
-            GLOBAL_OTP = ""+Math.floor(100000 + Math.random() * 900000);
+            GLOBAL_OTP = "" + Math.floor(100000 + Math.random() * 900000);
             await sendOtpEmail(email_id, GLOBAL_OTP);
 
 
-            res.status(201).json({ 
-                success: true, 
+            res.status(201).json({
+                success: true,
                 message: 'Contractor registration successful.',
                 data: {
                     u_id: newUser.id,
@@ -445,10 +449,10 @@ export const registerGovernmentOfficial = [
             if (existingUser) {
                 return res.status(409).json({ success: false, message: 'An account with this email already exists.' });
             }
-            
+
 
             const governmentId = req.files.governmentId[0];
-        const proofOfEmployment = req.files.proofOfEmployment[0];
+            const proofOfEmployment = req.files.proofOfEmployment[0];
             // 1. Create the user in the 'users' table
             const { data: newUser, error: userError } = await supabase.from('users').insert([{
                 name,
@@ -462,7 +466,7 @@ export const registerGovernmentOfficial = [
 
             if (userError) throw userError;
 
-             const [idBuffer, proofBuffer] = await Promise.all([
+            const [idBuffer, proofBuffer] = await Promise.all([
                 readFileAsync(governmentId.path),
                 readFileAsync(proofOfEmployment.path)
             ]);
@@ -497,14 +501,14 @@ export const registerGovernmentOfficial = [
                 unlinkAsync(governmentId.path),
                 unlinkAsync(proofOfEmployment.path)
             ]);
-            
+
             // 5. Send OTP for email verification
-            GLOBAL_OTP = ""+Math.floor(100000 + Math.random() * 900000);
+            GLOBAL_OTP = "" + Math.floor(100000 + Math.random() * 900000);
             await sendOtpEmail(email_id, GLOBAL_OTP);
 
 
-            res.status(201).json({ 
-                success: true, 
+            res.status(201).json({
+                success: true,
                 message: 'Government official registration successful.',
                 data: {
                     u_id: newUser.id,
@@ -570,7 +574,7 @@ export const resetPassword = async (req, res) => {
         if (error || !user) {
             return res.status(400).json({ success: false, message: 'Password reset token is invalid or has expired.' });
         }
-        
+
         const now = new Date();
         if (new Date(user.reset_password_expires) < now) {
             return res.status(400).json({ success: false, message: 'Password reset token is invalid or has expired.' });

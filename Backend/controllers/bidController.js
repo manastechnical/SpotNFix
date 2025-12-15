@@ -11,6 +11,27 @@ export const submitBid = async (req, res) => {
             required: ['pothole_id', 'contractor_id', 'amount', 'description']
         });
     }
+    try {
+        const { data, error } = await supabase
+            .from("users")
+            .select("*")
+            .eq("id", contractor_id)
+            .single();
+        if (error) {
+            throw error
+        }
+        if (data.verify === "blacklisted") {
+            console.error('Error handling bid: User is blacklisted');
+            return res.status(500).json({
+                error: 'User is blacklisted'
+            });
+        }
+
+    } catch (error) {
+        console.error("Check failed:", error.message);
+        // Important: Return a response here, otherwise the request hangs
+        return res.status(500).json({ error: "Server validation failed" });
+    }
 
     try {
         // First check if bid exists for this pothole
