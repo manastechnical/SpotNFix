@@ -129,7 +129,7 @@ export const acceptBid = async (req, res) => {
         if (data[0]?.bids[0]?.users?.email) {
             // Log the email for debugging
             console.log("email", data[0].bids[0].users.email);
-            await sendContractAssignEmail(data[0].bids[0].users.email, data[0].description);
+            sendContractAssignEmail(data[0].bids[0].users.email, data[0].description);
         } else {
             console.warn("Could not send email: User email not found in the data.");
         }

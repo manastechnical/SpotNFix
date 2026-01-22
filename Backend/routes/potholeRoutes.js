@@ -32,7 +32,7 @@ router.patch('/verify/:id', verifyPothole);
 router.patch('/verify-with-severity/:id', verifyPotholeWithSeverity);
 router.patch('/discard/:id', discardPothole);
 router.patch('/finalize-repair/:id', finalizePotholeRepair);
-router.patch('/reject-repair/:id', rejectPotholeRepair); // New route for rejecting repair
+router.patch('/reject-repair/:id/:potholeId', rejectPotholeRepair); // New route for rejecting repair
 
 router.post(
     '/:potholeId/re-report/:contractId',

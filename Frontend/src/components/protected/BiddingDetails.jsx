@@ -203,7 +203,7 @@ const BiddingDetails = () => {
         const toastId = toast.loading("Submitting proof...");
 
         const formData = new FormData();
-        files.forEach(file => formData.append('images', file));
+formData.append('image', files[0]);
         formData.append('potholeId', selectedPothole.id);
 
         try {
@@ -272,7 +272,13 @@ const BiddingDetails = () => {
                         <p className="text-xs text-gray-500 mt-1"><span className="font-semibold">Address:</span> {isAddressLoading ? "Fetching..." : potholeAddress}</p>
                     </div>
                     <div className="relative w-full h-48 bg-gray-200 rounded-lg">
-                        <img src={selectedPothole.images?.[currentImageIndex]?.image_url || placeholderImageUrl} alt="Pothole" className="w-full h-full rounded-lg object-cover" />
+                        <img src={
+        selectedPothole.images?.length 
+            ? (selectedPothole.images[currentImageIndex].type === 'fix_proof' && selectedPothole.images[currentImageIndex].completed_img_url
+                ? selectedPothole.images[currentImageIndex].completed_img_url 
+                : selectedPothole.images[currentImageIndex].image_url)
+            : placeholderImageUrl
+    } alt="Pothole" className="w-full h-full rounded-lg object-cover" />
                         {selectedPothole.images && selectedPothole.images.length > 1 && (
                             <>
                                 <button onClick={handlePrevImage} className="absolute top-1/2 left-2 -translate-y-1/2 bg-black/40 text-white rounded-full p-1.5 hover:bg-black/60 transition" aria-label="Previous image">&#10094;</button>

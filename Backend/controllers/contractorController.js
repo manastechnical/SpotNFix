@@ -1,17 +1,45 @@
+import { v4 as uuidv4 } from 'uuid'; // Ensure you have this imported
 import supabase from '../supabaseClient.js';
 
 export const potholeFixed = async (req, res) => {
-    // 1. Get IDs from the request
+    // 1. Get IDs and File from the request
     const { bidId } = req.params;
-    const { potholeId } = req.body; // Get potholeId from the request body
+    const { potholeId } = req.body; 
+    const imageFile = req.file; // The repair proof image
 
     // 2. Validate inputs
     if (!bidId || !potholeId) {
         return res.status(400).json({ error: 'Bid ID and Pothole ID are required.' });
     }
+    if (!imageFile) {
+        return res.status(400).json({ error: 'Repair proof image is required.' });
+    }
 
     try {
-        // 3. Update the contract status to 'completed'
+        // --- 3. Upload Image to Supabase Storage ('fixed_pothole' bucket) ---
+        // We use a unique name just like in reportPothole
+        const fileName = `${potholeId}/${uuidv4()}-${imageFile.originalname}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('fixed_pothole') // Uploading to the requested bucket
+            .upload(fileName, imageFile.buffer, {
+                contentType: imageFile.mimetype,
+                cacheControl: '3600',
+                upsert: false,
+            });
+        if (uploadError) {
+            console.error("Upload Error:", uploadError);
+            return res.status(500).json({ error: 'Failed to upload repair image.' });
+            }
+        // --- 4. Get the Public URL ---
+        const { data: { publicUrl } } = supabase.storage
+            .from('fixed_pothole')
+            .getPublicUrl(fileName);
+
+
+        // --- 5. Database Updates (Sequential) ---
+
+        // A. Update the contract status to 'completed'
         const { data: contractData, error: contractError } = await supabase
             .from('contracts')
             .update({
@@ -20,16 +48,17 @@ export const potholeFixed = async (req, res) => {
             })
             .eq('bid_id', bidId)
             .select()
-            .single(); // Use single() as we expect one record per bid
+            .single();
 
         if (contractError) {
+            // Check specifically if the contract wasn't found
             if (contractError.code === 'PGRST116') {
                 return res.status(404).json({ error: 'Contract not found for the given bid ID.' });
             }
             throw contractError;
         }
 
-        // 4. Update the pothole status to 'under_review'
+        // B. Update the pothole status to 'under_review'
         const { data: potholeData, error: potholeError } = await supabase
             .from('potholes')
             .update({ status: 'under_review' })
@@ -38,19 +67,34 @@ export const potholeFixed = async (req, res) => {
             .single();
 
         if (potholeError) {
-            // This is a critical error. In a real app, you might roll back the contract update.
             return res.status(500).json({ error: 'Contract updated, but failed to update pothole status.' });
         }
+        // C. Update the images table with the new URI
+        // We find the image record associated with this pothole_id and update the completed_img_url
+        const { data: imageData, error: imageError } = await supabase
+            .from('images')
+            .update({ 
+                completed_img_url: publicUrl,
+                type: 'fix_proof' // Setting the new URI here
+            })
+            .eq('pothole_id', potholeId)
+            .select();
+
+        if (imageError) {
+            console.error("Image Table Update Error:", imageError);
+            // We don't fail the whole request here since the main workflow (Contract/Pothole status) succeeded,
+            // but we log it. You might want to return a warning.
+        }
         
-        // 5. Send a success response with all updated data
+        // 6. Send success response
         return res.status(200).json({
-            message: 'Work marked as complete and is now under review.',
+            message: 'Work marked as complete, image uploaded, and case is now under review.',
             contract: contractData,
-            pothole: potholeData
+            pothole: potholeData,
+            proof_image: publicUrl
         });
 
     } catch (error) {
-        // 6. Handle any other unexpected errors
         console.error("Error in potholeFixed controller:", error.message);
         return res.status(500).json({ 
             error: 'An internal server error occurred.',

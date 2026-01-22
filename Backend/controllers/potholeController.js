@@ -186,7 +186,8 @@ export const getAllPotholes = async (req, res) => {
         verify,
         images (
             image_url,
-            type
+            type,
+            completed_img_url
         ),
         bids (
             id,
@@ -258,7 +259,7 @@ export const verifyPothole = async (req, res) => {
 
         if (data.users?.email) {
             console.log("email", data.users.email);
-            await sendPotholeStatusEmail(data.users.email, 'verified');
+            sendPotholeStatusEmail(data.users.email, 'verified');
         }
         res.status(200).json({ message: 'Pothole verified successfully!', data });
 
@@ -376,7 +377,7 @@ export const discardPothole = async (req, res) => {
 
         if (data.users?.email) {
             console.log("email", data.users.email);
-            await sendPotholeStatusEmail(data.users.email, 'rejected');
+            sendPotholeStatusEmail(data.users.email, 'rejected');
         }
         res.status(200).json({ message: 'Pothole discarded successfully!', data });
 
@@ -408,7 +409,7 @@ export const finalizePotholeRepair = async (req, res) => {
         // If the RPC call returns an error (e.g., pothole not found)
         if (data?.users?.email) {
             console.log("email", data.users.email);
-            await sendPotholeFixedEmail(data.users.email, data.description);
+            sendPotholeFixedEmail(data.users.email, data.description);
 
         } else {
             console.warn("Could not send 'pothole fixed' email: User email not found.");
@@ -459,10 +460,10 @@ const getIdsToDelete = (bids) => {
 };
 
 export const rejectPotholeRepair = async (req, res) => {
-    const { id } = req.params;
+    const { id, potholeId } = req.params;
 
     // Validation
-    if (!id) {
+    if (!id || !potholeId) {
         return res.status(400).json({ error: 'Contract ID is required.' });
     }
 
@@ -497,10 +498,23 @@ export const rejectPotholeRepair = async (req, res) => {
             return res.status(404).json({ error: 'Could not find the contractor for this contract.' });
         }
 
+        const { data: imageData, error: imageError } = await supabase
+            .from('images')
+            .update({ type: 'before_repair' })
+            .eq('pothole_id', potholeId) // Use the correct ID column here (e.g., 'id' or 'pothole_id')
+            .select()
+            .maybeSingle(); // <--- This returns null (no error) if 0 rows are found
+
+        if (imageError) {
+            console.error("Error updating image:", imageError);
+        } else if (!imageData) {
+            console.log("No image found to update; continuing...");
+        }
+
         // Send Email (Fire-and-forget: don't await if you don't want to block the response)
         if (contractorEmail) {
             // Ensure this function exists in your codebase
-            await sendRepairRejectedEmail(contractorEmail, "");
+            sendRepairRejectedEmail(contractorEmail, "");
         } else {
             console.warn("Could not send email: Contractor email not found.");
         }
@@ -672,7 +686,10 @@ export const reportDuplicatePothole = async (req, res) => {
         // This will replace the old image record if one exists, or add a new one.
         const { error: imageDbError } = await supabase
             .from('images')
-            .update({ image_url: publicUrl })
+            .update({
+                image_url: publicUrl,
+                type: 'before_repair'
+            })
             .eq('pothole_id', potholeId);                   //wants to fix this since it only updates if there is already an image
 
         if (imageDbError) throw imageDbError;
@@ -718,6 +735,18 @@ export const discardReopen = async (req, res) => {
             }
             throw error;
         }
+        const { data: imageData, error: imageError } = await supabase
+            .from('images')
+            .update({ type: 'fix_proof' })
+            .eq('pothole_id', id) // Use the correct ID column here (e.g., 'id' or 'pothole_id')
+            .select()
+            .maybeSingle(); // <--- This returns null (no error) if 0 rows are found
+
+        if (imageError) {
+            console.error("Error updating image:", imageError);
+        } else if (!imageData) {
+            console.log("No image found to update; continuing...");
+        }
 
         // Updated success message
         res.status(200).json({ message: 'Reopened claim discarded and pothole status set to fixed.', data });
@@ -736,7 +765,7 @@ export const penalizeReopen = async (req, res) => {
     if (!id) {
         return res.status(400).json({ error: 'Contract ID is required.' });
     }
-    var contractorEmail="";
+    var contractorEmail = "";
     try {
         // Find the contract by its ID and update its status to 'penalized'.
         const { data, error } = await supabase
@@ -750,7 +779,7 @@ export const penalizeReopen = async (req, res) => {
             .single();
         let contractData = data;
         console.log(data, "contract data");
-        const potholeID=data?.bids?.pothole_id;
+        const potholeID = data?.bids?.pothole_id;
         if (data?.bids?.users?.email) {
 
             contractorEmail = data.bids.users.email;
@@ -855,15 +884,27 @@ export const penalizeReopen = async (req, res) => {
                 }
             }
             const { data: potholeData, error: potholeError } = await supabase
-            .from('potholes')
-            .update({ status: 'reported' })
-            .eq('id', potholeID)
-            .select()
-            .single();
-            if(potholeError)
+                .from('potholes')
+                .update({ status: 'reported' })
+                .eq('id', potholeID)
+                .select()
+                .single();
+            if (potholeError)
                 console.error('Error updating pothole status:', potholeError.message);
+            const { data: imageData, error: imageError } = await supabase
+                .from('images')
+                .update({ type: 'fix_proof' })
+                .eq('pothole_id', id) // Use the correct ID column here (e.g., 'id' or 'pothole_id')
+                .select()
+                .maybeSingle(); // <--- This returns null (no error) if 0 rows are found
 
-            sendBlacklistEmail(contractorEmail,"");
+            if (imageError) {
+                console.error("Error updating image:", imageError);
+            } else if (!imageData) {
+                console.log("No image found to update; continuing...");
+            }
+
+            sendBlacklistEmail(contractorEmail, "");
         }
         res.status(200).json({
             message: 'Contract has been penalized.',

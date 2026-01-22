@@ -233,11 +233,13 @@ const ContractorBidding = () => {
                     </div>
                     <div className="relative w-full h-48 bg-gray-200 rounded-lg">
                         <img
-                            src={
-                                selectedPothole.images && selectedPothole.images.length > 0
-                                    ? selectedPothole.images[currentImageIndex].image_url
-                                    : placeholderImageUrl
-                            }
+                           src={
+        selectedPothole.images?.length 
+            ? (selectedPothole.images[currentImageIndex].type === 'fix_proof' && selectedPothole.images[currentImageIndex].completed_img_url
+                ? selectedPothole.images[currentImageIndex].completed_img_url 
+                : selectedPothole.images[currentImageIndex].image_url)
+            : placeholderImageUrl
+    }
                             alt="Pothole"
                             className="w-full h-full rounded-lg object-cover"
                         />

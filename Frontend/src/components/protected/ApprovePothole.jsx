@@ -240,11 +240,11 @@ const ApprovePothole = () => {
         }
     };
 
-    const handleRejectRepair = async (contractId) => {
+    const handleRejectRepair = async (contractId,potholeId) => {
         setIsUpdating(true);
         const toastId = toast.loading("Rejecting Repair...");
         try {
-            await apiConnector("patch", `${potholeEndpoints.REJECT_REPAIR}/${contractId}`, {});
+            await apiConnector("patch", `${potholeEndpoints.REJECT_REPAIR}/${contractId}/${potholeId}`, {});
             toast.success("Repair Rejected. Contractor has been notified.", { id: toastId });
             setSelectedPothole(null);
             await fetchPotholes();
@@ -349,7 +349,13 @@ const ApprovePothole = () => {
 
                     {/* Image Carousel */}
                     <div className="relative w-full h-48 bg-gray-200 rounded-lg">
-                        <img src={selectedPothole.images?.length ? selectedPothole.images[currentImageIndex].image_url : placeholderImageUrl} alt="Pothole" className="w-full h-full rounded-lg object-cover" />
+                        <img src={
+        selectedPothole.images?.length 
+            ? (selectedPothole.images[currentImageIndex].type === 'fix_proof' && selectedPothole.images[currentImageIndex].completed_img_url
+                ? selectedPothole.images[currentImageIndex].completed_img_url 
+                : selectedPothole.images[currentImageIndex].image_url)
+            : placeholderImageUrl
+    } alt="Pothole" className="w-full h-full rounded-lg object-cover" />
                         {selectedPothole.images?.length > 1 && (
                             <>
                                 <button onClick={handlePrevImage} className="absolute top-1/2 left-2 -translate-y-1/2 bg-black/40 text-white rounded-full p-1.5 hover:bg-black/60 transition" aria-label="Previous image">&#10094;</button>
@@ -410,7 +416,7 @@ const ApprovePothole = () => {
 
                     {getStatusInfo(selectedPothole).text === 'Final Review' && (
                         <div className="border-t pt-3 flex justify-between space-x-3">
-                            <Button className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white" onClick={() => handleRejectRepair(selectedPothole.current_bid?.contracts?.[0]?.id)} disabled={isUpdating}>Reject Work</Button>
+                            <Button className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white" onClick={() => handleRejectRepair(selectedPothole.current_bid?.contracts?.[0]?.id, selectedPothole.id)} disabled={isUpdating}>Reject Work</Button>
                             <Button className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" onClick={() => handleFinalizeRepair(selectedPothole.id)} disabled={isUpdating}>Accept & Finalize</Button>
                         </div>
                     )}
