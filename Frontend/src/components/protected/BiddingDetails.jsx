@@ -155,19 +155,14 @@ const BiddingDetails = () => {
     // --- Modal Functions (Integrated) ---
     const handleFileChange = useCallback((selectedFiles) => {
         if (!selectedFiles || selectedFiles.length === 0) return;
-        const currentFileCount = files.length;
-        const maxFiles = 4;
-        if (currentFileCount >= maxFiles) {
-            toast.error(`You can only upload a maximum of ${maxFiles} images.`);
-            return;
+
+        // Only allow a single proof image
+        const firstFile = selectedFiles[0];
+        if (selectedFiles.length > 1) {
+            toast.error("You can upload only one image as proof.");
         }
-        const newFiles = Array.from(selectedFiles);
-        const filesToUpload = newFiles.slice(0, maxFiles - currentFileCount);
-        if (newFiles.length > filesToUpload.length) {
-            toast.error(`You can only add ${maxFiles - currentFileCount} more image(s).`);
-        }
-        setFiles(prev => [...prev, ...filesToUpload]);
-    }, [files]);
+        setFiles([firstFile]);
+    }, []);
 
     const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
     const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
@@ -219,7 +214,14 @@ formData.append('image', files[0]);
             fetchPotholes();
         } catch (error) {
             console.error("Failed to submit repair proof:", error);
-            toast.error("Submission failed. Please try again.", { id: toastId });
+            const serverMessage = error?.response?.data?.error;
+            if (serverMessage === 'Geolocation does not match') {
+                toast.error("Geolocation does not match", { id: toastId });
+            } else if (serverMessage === 'potholes visible in the image') {
+                toast.error("potholes visible in the image", { id: toastId });
+            } else {
+                toast.error("Submission failed. Please try again.", { id: toastId });
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -322,9 +324,9 @@ formData.append('image', files[0]);
                             <button onClick={closeModal} className="text-gray-500 hover:text-gray-800"><CloseIcon /></button>
                         </div>
                         <div className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
-                            <input type="file" multiple accept="image/*" className="hidden" id="file-upload" onChange={(e) => handleFileChange(e.target.files)} />
+                            <input type="file" accept="image/*" className="hidden" id="file-upload" onChange={(e) => handleFileChange(e.target.files)} />
                             <label htmlFor="file-upload" className="cursor-pointer text-gray-600">
-                                <p className="font-semibold">Drag & drop pictures here</p>
+                                <p className="font-semibold">Drag & drop a picture here</p>
                                 <p className="text-sm text-gray-500">or</p>
                                 <p className="text-blue-600 font-bold">Click to browse</p>
                             </label>
