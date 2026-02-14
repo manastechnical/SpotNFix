@@ -11,6 +11,15 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const placeholderImageUrl = "https://via.placeholder.com/400x300.png?text=No+Image+Available";
 
+// --- HELPER: Find the active contract from ALL bids ---
+const getActiveContract = (pothole) => {
+    if (!pothole || !pothole.bids) return null;
+    // Find the bid that has been accepted
+    const acceptedBid = pothole.bids.find(bid => bid.status === 'accepted');
+    // Return the contract associated with that bid
+    return acceptedBid?.contracts?.[0] || null;
+};
+
 // Helper function to determine status text and color
 const getStatusInfo = (pothole) => {
     switch (pothole.status) {
@@ -21,7 +30,8 @@ const getStatusInfo = (pothole) => {
         case 'discarded':
             return { text: 'Discarded', className: 'bg-red-100 text-red-700' };
         case 'under_review': {
-            const contract = pothole?.current_bid?.contracts?.[0];
+            const contract = getActiveContract(pothole);
+            
             if (contract && contract.status === 'completed') {
                 return { text: 'Final Review', className: 'bg-purple-100 text-purple-700' };
             }
@@ -63,6 +73,9 @@ const ApprovePothole = () => {
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [isUpdating, setIsUpdating] = useState(false);
     const [isLegendVisible, setIsLegendVisible] = useState(false);
+    
+    // State for Bid Modal
+    const [showBidModal, setShowBidModal] = useState(false);
 
     // Fetch all potholes from the API
     const fetchPotholes = async () => {
@@ -83,6 +96,7 @@ const ApprovePothole = () => {
     // Effect for fetching address when a pothole is selected
     useEffect(() => {
         setCurrentImageIndex(0);
+        setShowBidModal(false); 
         const fetchAddress = async () => {
             if (!selectedPothole) {
                 setPotholeAddress("");
@@ -133,11 +147,9 @@ const ApprovePothole = () => {
     useEffect(() => {
         if (!mapRef.current || !potholes.length) return;
 
-        // Clear existing markers
         markersRef.current.forEach(marker => marker.remove());
         markersRef.current = [];
 
-        // Create and add new markers
         potholes.forEach(pothole => {
             let color;
             const statusInfo = getStatusInfo(pothole);
@@ -213,6 +225,7 @@ const ApprovePothole = () => {
             await apiConnector("patch", `${bidEndpoints.ACCEPT_BID}/${potholeId}`, { bidId, approverId: user.id });
 
             toast.success("Bid accepted successfully!", { id: toastId });
+            setShowBidModal(false); 
             setSelectedPothole(null);
             await fetchPotholes();
         } catch (error) {
@@ -292,10 +305,17 @@ const ApprovePothole = () => {
     const handlePrevImage = () => setCurrentImageIndex(prev => (prev > 0 ? prev - 1 : selectedPothole.images.length - 1));
     const handleNextImage = () => setCurrentImageIndex(prev => (prev < selectedPothole.images.length - 1 ? prev + 1 : 0));
 
+    // Get the active contract for the selected pothole
+    // 1. Get the bid that is specifically "accepted" (NOT just the current/lowest bid)
+    const acceptedBid = selectedPothole?.bids?.find(bid => bid.status === 'accepted');
+    // 2. Get the contract from that accepted bid
+    const activeContract = acceptedBid?.contracts?.[0];
+
     return (
         <div className="relative w-full h-full">
             <div ref={mapContainerRef} className="w-full h-full" />
 
+            {/* Legend */}
             <div className="absolute top-3 right-3 flex flex-col items-end">
                 <button
                     onClick={() => setIsLegendVisible(!isLegendVisible)}
@@ -340,7 +360,8 @@ const ApprovePothole = () => {
                         {['under_review', 'assigned', 'reopened'].includes(selectedPothole.status) && (
                             <p className={`mt-2 text-sm font-medium text-gray-800 p-2 rounded-md ${selectedPothole.status === 'reopened' ? 'bg-orange-100' : 'bg-yellow-100'}`}>
                                 <span className="font-semibold">Assigned To:</span>{' '}
-                                {selectedPothole.bids?.find(bid => bid.status === 'accepted')?.users?.name || 'Contractor Info Unavailable'}
+                                {/* Display name from the accepted bid explicitly */}
+                                {acceptedBid?.users?.name || 'Contractor Info Unavailable'}
                             </p>
                         )}
 
@@ -350,12 +371,12 @@ const ApprovePothole = () => {
                     {/* Image Carousel */}
                     <div className="relative w-full h-48 bg-gray-200 rounded-lg">
                         <img src={
-        selectedPothole.images?.length 
-            ? (selectedPothole.images[currentImageIndex].type === 'fix_proof' && selectedPothole.images[currentImageIndex].completed_img_url
-                ? selectedPothole.images[currentImageIndex].completed_img_url 
-                : selectedPothole.images[currentImageIndex].image_url)
-            : placeholderImageUrl
-    } alt="Pothole" className="w-full h-full rounded-lg object-cover" />
+                            selectedPothole.images?.length 
+                                ? (selectedPothole.images[currentImageIndex].type === 'fix_proof' && selectedPothole.images[currentImageIndex].completed_img_url
+                                    ? selectedPothole.images[currentImageIndex].completed_img_url 
+                                    : selectedPothole.images[currentImageIndex].image_url)
+                                : placeholderImageUrl
+                        } alt="Pothole" className="w-full h-full rounded-lg object-cover" />
                         {selectedPothole.images?.length > 1 && (
                             <>
                                 <button onClick={handlePrevImage} className="absolute top-1/2 left-2 -translate-y-1/2 bg-black/40 text-white rounded-full p-1.5 hover:bg-black/60 transition" aria-label="Previous image">&#10094;</button>
@@ -365,13 +386,30 @@ const ApprovePothole = () => {
                         )}
                     </div>
 
-                    {/* Status Tags */}
+                    {/* Status Tags & Info Button */}
                     <div className="flex justify-between items-start">
                         <div className="flex flex-col gap-2">
                             <div className="flex flex-col gap-1">
-                                <span className={`px-3 py-1 text-xs font-bold rounded-full ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700" : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
-                                    {selectedPothole.severity} Severity
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className={`px-3 py-1 text-xs font-bold rounded-full ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700" : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
+                                        {selectedPothole.severity} Severity
+                                    </span>
+                                    
+                                    {/* Info Button for Bids */}
+                                    {selectedPothole.bids && selectedPothole.bids.length > 0 && selectedPothole.status === 'reported' && selectedPothole.verify && (
+                                        <button 
+                                            onClick={() => setShowBidModal(true)}
+                                            className="bg-blue-100 p-1 rounded-full text-blue-600 hover:bg-blue-200 transition-colors"
+                                            title="View and select from all bids"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
                                 {selectedPothole.verify && selectedPothole.severity && (
                                     <span className="text-xs text-gray-500 text-center">🤖 AI Detected</span>
                                 )}
@@ -400,26 +438,99 @@ const ApprovePothole = () => {
                         </div>
                     )}
 
-                    {selectedPothole.status === 'reopened' && selectedPothole.current_bid?.contracts?.[0]?.status !== 'penalized' && (
+                    {/* UPDATED REOPENED SECTION:
+                       1. Uses activeContract (from accepted bid) instead of selectedPothole.current_bid (lowest bid)
+                       2. Logs the user's email to console for verification.
+                    */}
+                    {selectedPothole.status === 'reopened' && activeContract?.status !== 'penalized' && (
                         <div className="border-t pt-3 flex justify-between space-x-3">
+                            {console.log("Penalizing Contractor:", acceptedBid?.users?.email)}
                             <Button className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white" onClick={() => handleDiscardReopen(selectedPothole.id)} disabled={isUpdating}>Reject</Button>
-                            <Button className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" onClick={() => handlePenalizeReopen(selectedPothole.current_bid?.contracts?.[0]?.id)} disabled={isUpdating}>Accept</Button>
+                            <Button className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" onClick={() => handlePenalizeReopen(activeContract?.id)} disabled={isUpdating}>Accept</Button>
                         </div>
                     )}
 
                     {selectedPothole.status === 'reported' && selectedPothole.verify && selectedPothole.current_bid && (
                         <div className="border-t pt-3 flex flex-col gap-2">
-                            <div className="text-center text-sm text-gray-600">Lowest Bid: <span className="font-bold">₹{selectedPothole.current_bid.amount}</span> by <span className="font-bold">{selectedPothole.current_bid.users.name}</span></div>
-                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white" onClick={() => handleAcceptBid(selectedPothole.id, selectedPothole.current_bid.id)} disabled={isUpdating}>Accept Bid</Button>
+                            <div className="text-center text-sm text-gray-600">
+                                Lowest Bid: <span className="font-bold">₹{selectedPothole.current_bid.amount}</span> by <span className="font-bold">{selectedPothole.current_bid.users.name}</span>
+                            </div>
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white" onClick={() => handleAcceptBid(selectedPothole.id, selectedPothole.current_bid.id)} disabled={isUpdating}>
+                                Accept Lowest Bid
+                            </Button>
                         </div>
                     )}
 
-                    {getStatusInfo(selectedPothole).text === 'Final Review' && (
+                    {/* UPDATED: Final Review Section 
+                        Uses activeContract instead of current_bid 
+                    */}
+                    {getStatusInfo(selectedPothole).text === 'Final Review' && activeContract && (
                         <div className="border-t pt-3 flex justify-between space-x-3">
-                            <Button className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white" onClick={() => handleRejectRepair(selectedPothole.current_bid?.contracts?.[0]?.id, selectedPothole.id)} disabled={isUpdating}>Reject Work</Button>
-                            <Button className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" onClick={() => handleFinalizeRepair(selectedPothole.id)} disabled={isUpdating}>Accept & Finalize</Button>
+                            <Button 
+                                className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white" 
+                                onClick={() => handleRejectRepair(activeContract.id, selectedPothole.id)} 
+                                disabled={isUpdating}
+                            >
+                                Reject Work
+                            </Button>
+                            <Button 
+                                className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" 
+                                onClick={() => handleFinalizeRepair(selectedPothole.id)} 
+                                disabled={isUpdating}
+                            >
+                                Accept & Finalize
+                            </Button>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* --- All Bids Modal --- */}
+            {showBidModal && selectedPothole && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowBidModal(false)}>
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                        
+                        {/* Modal Header */}
+                        <div className="flex justify-between items-center p-4 border-b shrink-0">
+                            <h2 className="text-xl font-bold">All Bids</h2>
+                            <button onClick={() => setShowBidModal(false)} className="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+                        </div>
+
+                        {/* Modal Body with Vertical Scroll */}
+                        <div className="p-4 overflow-y-auto">
+                            {selectedPothole.bids && selectedPothole.bids.length > 0 ? (
+                                <div className="space-y-4">
+                                    {[...selectedPothole.bids]
+                                        .sort((a, b) => a.amount - b.amount) 
+                                        .map((bid) => (
+                                        <div key={bid.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <p className="font-bold text-lg">₹{bid.amount}</p>
+                                                    <p className="text-sm font-semibold text-gray-700">{bid.users?.name}</p>
+                                                    <p className="text-xs text-gray-500">{bid.users?.email}</p>
+                                                </div>
+                                                <Button 
+                                                    size="sm"
+                                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                                    onClick={() => handleAcceptBid(selectedPothole.id, bid.id)}
+                                                    disabled={isUpdating}
+                                                >
+                                                    {isUpdating ? '...' : 'Accept'}
+                                                </Button>
+                                            </div>
+                                            
+                                            <div className="bg-gray-100 p-2 rounded text-sm text-gray-700 break-words whitespace-pre-wrap">
+                                                {bid.description || "No description provided."}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-center text-gray-500 py-4">No bids available.</p>
+                            )}
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

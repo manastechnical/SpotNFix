@@ -57,5 +57,5 @@ export const verifyImage = (req, res, next) => {
     } catch (error) {
         console.error("EXIF Parsing Error:", error);
         return res.status(400).json({ error: "Could not verify image. It may not be a genuine camera photo or may lack metadata." });
-    }
+    }
 };

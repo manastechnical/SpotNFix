@@ -18,7 +18,6 @@ const CloseIcon = () => (
     </svg>
 );
 
-// --- NEW: Legend data array ---
 const legendItems = [
     { text: 'Work Completed', color: '#3B82F6' }, // Blue
     { text: 'Bid Accepted (Ongoing)', color: '#F59E0B' }, // Orange
@@ -38,14 +37,13 @@ const BiddingDetails = () => {
     const [potholeAddress, setPotholeAddress] = useState("");
     const [isAddressLoading, setIsAddressLoading] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    const [isLegendVisible, setIsLegendVisible] = useState(false); // --- NEW STATE ---
+    const [isLegendVisible, setIsLegendVisible] = useState(false);
 
-    // --- Modal State (Integrated) ---
+    // --- Modal State ---
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [files, setFiles] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-
 
     // --- Main Component Functions ---
     const fetchPotholes = async () => {
@@ -109,7 +107,6 @@ const BiddingDetails = () => {
             zoom: 10
         });
         
-        // --- MODIFIED LINES ---
         map.addControl(new mapboxgl.NavigationControl(), 'bottom-left');
         map.addControl(new mapboxgl.GeolocateControl({
             positionOptions: { enableHighAccuracy: true },
@@ -137,7 +134,7 @@ const BiddingDetails = () => {
             } else if (pothole.my_bid?.status === 'pending') {
                 color = legendItems.find(i => i.text === 'Bid Pending').color;
             } else {
-                return; // Don't show marker if status is unknown
+                return;
             }
 
             const marker = new mapboxgl.Marker({ color })
@@ -152,11 +149,9 @@ const BiddingDetails = () => {
     const handlePrevImage = () => setCurrentImageIndex(prev => (prev > 0 ? prev - 1 : selectedPothole.images.length - 1));
     const handleNextImage = () => setCurrentImageIndex(prev => (prev < selectedPothole.images.length - 1 ? prev + 1 : 0));
 
-    // --- Modal Functions (Integrated) ---
+    // --- Modal Functions ---
     const handleFileChange = useCallback((selectedFiles) => {
         if (!selectedFiles || selectedFiles.length === 0) return;
-
-        // Only allow a single proof image
         const firstFile = selectedFiles[0];
         if (selectedFiles.length > 1) {
             toast.error("You can upload only one image as proof.");
@@ -187,7 +182,6 @@ const BiddingDetails = () => {
             toast.error("Please upload at least one image as proof.");
             return;
         }
-
         const contractId = selectedPothole.my_bid.id;
         if (!contractId) {
             toast.error("Could not find a contract associated with this bid.");
@@ -198,7 +192,7 @@ const BiddingDetails = () => {
         const toastId = toast.loading("Submitting proof...");
 
         const formData = new FormData();
-formData.append('image', files[0]);
+        formData.append('image', files[0]);
         formData.append('potholeId', selectedPothole.id);
 
         try {
@@ -227,12 +221,41 @@ formData.append('image', files[0]);
         }
     };
 
+    // --- Helper to get Display Bid info ---
+    const getDisplayBid = (pothole) => {
+        // 1. Check if there is an ACCEPTED bid
+        const winningBid = pothole.bids?.find(bid => bid.status === 'accepted');
+        
+        if (winningBid) {
+            return {
+                label: "Winning Bid",
+                amount: winningBid.amount,
+                contractor: winningBid.users?.name || "N/A",
+                isWinner: true
+            };
+        }
+
+        // 2. If no winner yet, show Lowest Bid
+        // (Assuming current_bid from backend is already the lowest sorted)
+        if (pothole.current_bid) {
+            return {
+                label: "Current Lowest Bid",
+                amount: pothole.current_bid.amount,
+                contractor: pothole.current_bid.users?.name || "N/A",
+                isWinner: false
+            };
+        }
+
+        return null;
+    };
+
+    const displayBid = selectedPothole ? getDisplayBid(selectedPothole) : null;
 
     return (
         <div className="relative w-full h-full">
             <div ref={mapContainerRef} className="w-full h-full" />
 
-            {/* --- NEW: Legend Elements --- */}
+            {/* --- Legend --- */}
             <div className="absolute top-4 right-4 flex flex-col items-end">
                 <button
                     onClick={() => setIsLegendVisible(!isLegendVisible)}
@@ -273,14 +296,16 @@ formData.append('image', files[0]);
                         <p className="text-sm text-gray-700"><span className="font-semibold">Description:</span> {selectedPothole.description}</p>
                         <p className="text-xs text-gray-500 mt-1"><span className="font-semibold">Address:</span> {isAddressLoading ? "Fetching..." : potholeAddress}</p>
                     </div>
+                    
+                    {/* Image Carousel */}
                     <div className="relative w-full h-48 bg-gray-200 rounded-lg">
                         <img src={
-        selectedPothole.images?.length 
-            ? (selectedPothole.images[currentImageIndex].type === 'fix_proof' && selectedPothole.images[currentImageIndex].completed_img_url
-                ? selectedPothole.images[currentImageIndex].completed_img_url 
-                : selectedPothole.images[currentImageIndex].image_url)
-            : placeholderImageUrl
-    } alt="Pothole" className="w-full h-full rounded-lg object-cover" />
+                            selectedPothole.images?.length 
+                                ? (selectedPothole.images[currentImageIndex].type === 'fix_proof' && selectedPothole.images[currentImageIndex].completed_img_url
+                                    ? selectedPothole.images[currentImageIndex].completed_img_url 
+                                    : selectedPothole.images[currentImageIndex].image_url)
+                                : placeholderImageUrl
+                        } alt="Pothole" className="w-full h-full rounded-lg object-cover" />
                         {selectedPothole.images && selectedPothole.images.length > 1 && (
                             <>
                                 <button onClick={handlePrevImage} className="absolute top-1/2 left-2 -translate-y-1/2 bg-black/40 text-white rounded-full p-1.5 hover:bg-black/60 transition" aria-label="Previous image">&#10094;</button>
@@ -289,17 +314,30 @@ formData.append('image', files[0]);
                             </>
                         )}
                     </div>
+                    
+                    {/* Severity & Type Badges */}
                     <div className="flex flex-col gap-2 self-start">
                         <span className={`px-3 py-1 text-xs font-bold rounded-full ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700" : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>{selectedPothole.severity} Severity</span>
                         {selectedPothole.pothole_type && (
                             <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{selectedPothole.pothole_type}</span>
                         )}
                     </div>
+
+                    {/* --- UPDATED BID INFO SECTION --- */}
                     <div className="border-t pt-3 space-y-2">
-                        <div>
-                            <p className="text-sm text-gray-700"><span className="font-semibold">Current Lowest Bid:</span> {selectedPothole.current_bid ? `₹${selectedPothole.current_bid.amount}` : "No bids yet"}</p>
-                            <p className="text-sm text-gray-700"><span className="font-semibold">By:</span> {selectedPothole.current_bid?.users?.name || "N/A"}</p>
-                        </div>
+                        {displayBid ? (
+                            <div className={displayBid.isWinner ? "bg-green-50 p-2 rounded-md border border-green-200" : ""}>
+                                <p className="text-sm text-gray-700">
+                                    <span className="font-semibold">{displayBid.label}:</span> ₹{displayBid.amount}
+                                </p>
+                                <p className="text-sm text-gray-700">
+                                    <span className="font-semibold">{displayBid.isWinner ? "Winner" : "By"}:</span> {displayBid.contractor}
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-500 italic">No bids yet</p>
+                        )}
+
                         {selectedPothole.my_bid && (
                             <div className="border-t pt-3">
                                 <div className="flex items-center gap-2">
@@ -309,13 +347,14 @@ formData.append('image', files[0]);
                             </div>
                         )}
                     </div>
+
                     {selectedPothole.my_bid?.status === 'accepted' && selectedPothole.my_bid?.contracts?.[0]?.status !== 'completed' && (
                         <Button className="w-full mt-2 bg-green-500 hover:bg-green-600 text-white" onClick={() => setIsModalOpen(true)}>Repair Complete</Button>
                     )}
                 </div>
             )}
 
-            {/* --- Modal JSX (Integrated) --- */}
+            {/* --- Modal --- */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-sm">
                     <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg m-4 animate-fade-in-up">

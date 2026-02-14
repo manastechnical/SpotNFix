@@ -11,7 +11,7 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const placeholderImageUrl = "https://via.placeholder.com/400x300.png?text=No+Image+Available";
 
-// --- NEW: Legend data array ---
+// Legend data array
 const legendItems = [
     { text: 'High Severity', color: '#EF4444' },   // Red
     { text: 'Medium Severity', color: '#F59E0B' }, // Amber
@@ -33,7 +33,7 @@ const ContractorBidding = () => {
     const [potholeAddress, setPotholeAddress] = useState("");
     const [isAddressLoading, setIsAddressLoading] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    const [isLegendVisible, setIsLegendVisible] = useState(false); // --- NEW STATE ---
+    const [isLegendVisible, setIsLegendVisible] = useState(false);
 
     // Fetch all potholes from the API
     const fetchPotholes = async () => {
@@ -57,6 +57,7 @@ const ContractorBidding = () => {
         fetchPotholes();
     }, []);
 
+    // Fetch Address logic
     useEffect(() => {
         setCurrentImageIndex(0);
         const fetchAddress = async () => {
@@ -87,7 +88,7 @@ const ContractorBidding = () => {
         fetchAddress();
     }, [selectedPothole]);
 
-    // Initialize and manage map instance
+    // Initialize map
     useEffect(() => {
         if (mapRef.current) return;
         const map = new mapboxgl.Map({
@@ -109,13 +110,12 @@ const ContractorBidding = () => {
         };
     }, []);
 
-    // Add pothole markers to the map
+    // Add markers
     useEffect(() => {
         if (!mapRef.current || !potholes.length) return;
 
-        // First, remove any existing markers from the map
         markersRef.current.forEach(marker => marker.remove());
-        markersRef.current = []; // Clear the reference array
+        markersRef.current = [];
 
         potholes
             .filter(pothole => pothole.verify === true && pothole.status === "reported")
@@ -131,9 +131,9 @@ const ContractorBidding = () => {
             });
     }, [potholes]);
 
-
-    const hasUserBid = (pothole) => {
-        return pothole?.bids?.some(bid => bid.contractor_id === currentUser?.id);
+    // Helper to find existing bid for current user
+    const getUserBid = (pothole) => {
+        return pothole?.bids?.find(bid => bid.contractor_id === currentUser?.id);
     };
 
     const handleBidSubmit = async () => {
@@ -146,26 +146,49 @@ const ContractorBidding = () => {
                 toast.error("Bid amount must be a positive number.");
                 return;
             }
-            if (activePothole.current_bid && parseFloat(bidAmount) >= activePothole.current_bid.amount) {
-                toast.error(`Your bid must be lower than the current bid of ₹${activePothole.current_bid.amount}.`);
-                return;
-            }
-            const bidData = { pothole_id: activePothole.id, contractor_id: currentUser.id, amount: parseFloat(bidAmount), description: bidDescription, status: "pending" };
+
+            // Optional: You can enforce that new bid is lower than current lowest
+            // if (activePothole.current_bid && parseFloat(bidAmount) >= activePothole.current_bid.amount) { ... }
+            
+            const bidData = { 
+                pothole_id: activePothole.id, 
+                contractor_id: currentUser.id, 
+                amount: parseFloat(bidAmount), 
+                description: bidDescription 
+            };
+            
             await apiConnector("post", bidEndpoints.SUBMIT_BID, bidData);
-            toast.success("Bid placed successfully!");
+            
+            // Check if it was an update or new bid for toast message
+            const wasUpdate = getUserBid(activePothole);
+            toast.success(wasUpdate ? "Bid updated successfully!" : "Bid placed successfully!");
+            
             setBidAmount("");
             setBidDescription("");
             setActivePothole(null);
             setSelectedPothole(null);
-            fetchPotholes();
+            fetchPotholes(); // Refresh data
         } catch (error) {
             console.error("Failed to submit bid:", error);
-            if(error.response.data.error=="User is blacklisted")
+            if(error.response?.data?.error === "User is blacklisted")
                 toast.error("You are blacklisted and cannot place bids.");
             else
                 toast.error("Failed to place bid. Please try again.");
         }
     };
+
+    // Open modal and pre-fill if editing
+    const handleOpenBidModal = (pothole) => {
+        const existingBid = getUserBid(pothole);
+        if(existingBid) {
+            setBidAmount(existingBid.amount);
+            setBidDescription(existingBid.description || "");
+        } else {
+            setBidAmount("");
+            setBidDescription("");
+        }
+        setActivePothole(pothole);
+    }
 
     const handlePrevImage = () => {
         setCurrentImageIndex(prev => (prev > 0 ? prev - 1 : selectedPothole.images.length - 1));
@@ -179,7 +202,7 @@ const ContractorBidding = () => {
         <div className="relative w-full h-full">
             <div ref={mapContainerRef} className="w-full h-full" />
 
-            {/* --- NEW: Legend Elements --- */}
+            {/* Legend */}
             <div className="absolute top-4 right-4 flex flex-col items-end">
                 <button
                     onClick={() => setIsLegendVisible(!isLegendVisible)}
@@ -197,10 +220,7 @@ const ContractorBidding = () => {
                         <ul className="space-y-1">
                             {legendItems.map(item => (
                                 <li key={item.text} className="flex items-center">
-                                    <span
-                                        className="w-4 h-4 rounded-full mr-2"
-                                        style={{ backgroundColor: item.color }}
-                                    ></span>
+                                    <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: item.color }}></span>
                                     <span className="text-xs text-gray-700">{item.text}</span>
                                 </li>
                             ))}
@@ -231,45 +251,36 @@ const ContractorBidding = () => {
                             {isAddressLoading ? "Fetching address..." : potholeAddress}
                         </p>
                     </div>
+                    
+                    {/* Image Gallery */}
                     <div className="relative w-full h-48 bg-gray-200 rounded-lg">
                         <img
                            src={
-        selectedPothole.images?.length 
-            ? (selectedPothole.images[currentImageIndex].type === 'fix_proof' && selectedPothole.images[currentImageIndex].completed_img_url
-                ? selectedPothole.images[currentImageIndex].completed_img_url 
-                : selectedPothole.images[currentImageIndex].image_url)
-            : placeholderImageUrl
-    }
+                                selectedPothole.images?.length 
+                                    ? (selectedPothole.images[currentImageIndex].type === 'fix_proof' && selectedPothole.images[currentImageIndex].completed_img_url
+                                        ? selectedPothole.images[currentImageIndex].completed_img_url 
+                                        : selectedPothole.images[currentImageIndex].image_url)
+                                    : placeholderImageUrl
+                            }
                             alt="Pothole"
                             className="w-full h-full rounded-lg object-cover"
                         />
                         {selectedPothole.images && selectedPothole.images.length > 1 && (
                             <>
-                                <button
-                                    onClick={handlePrevImage}
-                                    className="absolute top-1/2 left-2 -translate-y-1/2 bg-black/40 text-white rounded-full p-1.5 hover:bg-black/60 transition"
-                                    aria-label="Previous image"
-                                >
-                                    &#10094;
-                                </button>
-                                <button
-                                    onClick={handleNextImage}
-                                    className="absolute top-1/2 right-2 -translate-y-1/2 bg-black/40 text-white rounded-full p-1.5 hover:bg-black/60 transition"
-                                    aria-label="Next image"
-                                >
-                                    &#10095;
-                                </button>
+                                <button onClick={handlePrevImage} className="absolute top-1/2 left-2 -translate-y-1/2 bg-black/40 text-white rounded-full p-1.5 hover:bg-black/60 transition">&#10094;</button>
+                                <button onClick={handleNextImage} className="absolute top-1/2 right-2 -translate-y-1/2 bg-black/40 text-white rounded-full p-1.5 hover:bg-black/60 transition">&#10095;</button>
                                 <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs rounded-full px-2 py-0.5">
                                     {currentImageIndex + 1} / {selectedPothole.images.length}
                                 </div>
                             </>
                         )}
                     </div>
+
                     <div className="flex flex-col gap-2">
                         <span className={`px-3 py-1 text-xs font-bold rounded-full 
-              ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700"
-                                : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700"
-                                    : "bg-green-100 text-green-700"}`}>
+                            ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700"
+                            : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700"
+                            : "bg-green-100 text-green-700"}`}>
                             {selectedPothole.severity} Severity
                         </span>
                         {selectedPothole.pothole_type && (
@@ -278,6 +289,7 @@ const ContractorBidding = () => {
                             </span>
                         )}
                     </div>
+
                     <div className="border-t pt-3">
                         <p className="text-sm text-gray-700">
                             <span className="font-semibold">Current Lowest Bid:</span>{" "}
@@ -287,30 +299,59 @@ const ContractorBidding = () => {
                             <span className="font-semibold">By:</span>{" "}
                             {selectedPothole.current_bid?.users?.name || "N/A"}
                         </p>
+                        
+                        {/* Show user's bid if exists */}
+                        {getUserBid(selectedPothole) && (
+                            <p className="text-sm text-blue-700 mt-1">
+                                <span className="font-semibold">Your Bid:</span> ₹{getUserBid(selectedPothole).amount}
+                            </p>
+                        )}
                     </div>
+
+                    {/* Updated Button Logic */}
                     <Button
-                        className={`w-full mt-2 ${hasUserBid(selectedPothole)
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-blue-500 hover:bg-blue-600 text-white'
-                            }`}
-                        onClick={() => setActivePothole(selectedPothole)}
-                        disabled={hasUserBid(selectedPothole)}
-                        title={hasUserBid(selectedPothole) ? "You have already placed a bid on this pothole" : "Place a bid"}
+                        className="w-full mt-2 bg-blue-500 hover:bg-blue-600 text-white"
+                        onClick={() => handleOpenBidModal(selectedPothole)}
+                        title={getUserBid(selectedPothole) ? "Update your bid" : "Place a new bid"}
                     >
-                        {hasUserBid(selectedPothole) ? "Bid Already Placed" : "Place Your Bid"}
+                        {getUserBid(selectedPothole) ? "Update Your Bid" : "Place Your Bid"}
                     </Button>
                 </div>
             )}
+
+            {/* Modal */}
             {activePothole && (
                 <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50" onClick={() => setActivePothole(null)}>
                     <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 max-w-md" onClick={(e) => e.stopPropagation()}>
-                        <h2 className="text-xl font-bold mb-4">Place Your Bid</h2>
+                        <h2 className="text-xl font-bold mb-4">
+                            {getUserBid(activePothole) ? "Update Your Bid" : "Place Your Bid"}
+                        </h2>
+                        
                         <p className="mb-3 text-sm text-gray-600"><b>Pothole:</b> {activePothole.description}</p>
-                        <input type="number" placeholder="Enter bid amount (₹)" value={bidAmount} onChange={(e) => setBidAmount(e.target.value)} className="border p-2 w-full rounded mb-4" />
-                        <textarea placeholder="Describe your plan or materials..." value={bidDescription} onChange={(e) => setBidDescription(e.target.value)} className="border p-2 w-full rounded mb-4" rows="3" />
+                        
+                        <label className="text-xs font-bold text-gray-500 uppercase">Amount (₹)</label>
+                        <input 
+                            type="number" 
+                            placeholder="Enter bid amount" 
+                            value={bidAmount} 
+                            onChange={(e) => setBidAmount(e.target.value)} 
+                            className="border p-2 w-full rounded mb-4" 
+                        />
+                        
+                        <label className="text-xs font-bold text-gray-500 uppercase">Description / Plan</label>
+                        <textarea 
+                            placeholder="Describe your plan or materials..." 
+                            value={bidDescription} 
+                            onChange={(e) => setBidDescription(e.target.value)} 
+                            className="border p-2 w-full rounded mb-4" 
+                            rows="3" 
+                        />
+                        
                         <div className="flex justify-end space-x-2">
                             <Button variant="outline" onClick={() => setActivePothole(null)}>Cancel</Button>
-                            <Button className="bg-blue-500 hover:bg-blue-700 text-white" onClick={handleBidSubmit} disabled={!bidAmount || !bidDescription}>Submit Bid</Button>
+                            <Button className="bg-blue-500 hover:bg-blue-700 text-white" onClick={handleBidSubmit} disabled={!bidAmount || !bidDescription}>
+                                {getUserBid(activePothole) ? "Update Bid" : "Submit Bid"}
+                            </Button>
                         </div>
                     </div>
                 </div>

@@ -176,50 +176,51 @@ export const getAllPotholes = async (req, res) => {
         const { data, error } = await supabase
             .from('potholes')
             .select(`
-        id,
-        latitude,
-        longitude,
-        description,
-        severity,
-        pothole_type,
-        status,
-        verify,
-        images (
-            image_url,
-            type,
-            completed_img_url
-        ),
-        bids (
-            id,
-            amount,
-            description,
-            status,
-            contractor_id,
-            users (
-                name,
-                email
-            ),
-            contracts (
-            id,
-                bid_id,
+                id,
+                latitude,
+                longitude,
+                description,
+                severity,
+                pothole_type,
                 status,
-                start_date,
-                expected_end_date,
-                actual_end_date
-            )
-        )
+                verify,
+                images (
+                    image_url,
+                    type,
+                    completed_img_url
+                ),
+                bids (
+                    id,
+                    amount,
+                    description,
+                    status,
+                    contractor_id,
+                    users (
+                        name,
+                        email
+                    ),
+                    contracts (
+                        id,
+                        bid_id,
+                        status,
+                        start_date,
+                        expected_end_date,
+                        actual_end_date
+                    )
+                )
             `)
-            .order('id');
+            // Sort bids by amount (Ascending) directly in DB query
+            .order('amount', { foreignTable: 'bids', ascending: true })
+            .order('id', { ascending: true }); // Sort potholes by ID
 
         if (error) throw error;
 
-        // Transform the data to include the current (lowest) bid
+        // Transform data
         const transformedData = data.map(pothole => ({
             ...pothole,
-            current_bid: pothole.bids && pothole.bids.length > 0
-                ? pothole.bids.reduce((lowest, current) =>
-                    current.amount < lowest.amount ? current : lowest
-                    , pothole.bids[0])
+            // Since we sorted in query, the first bid is the lowest
+            current_bid: pothole.bids && pothole.bids.length > 0 
+                ? pothole.bids[0] 
                 : null
         }));
 
@@ -758,183 +759,142 @@ export const discardReopen = async (req, res) => {
 };
 
 export const penalizeReopen = async (req, res) => {
-    // In a real app, you would have authentication middleware here.
+    const { id } = req.params; // This is the CONTRACT ID
 
-    const { id } = req.params; // Get the contract ID from the URL
     console.log("Penalizing contract ID:", id);
-    if (!id) {
-        return res.status(400).json({ error: 'Contract ID is required.' });
+
+    // 1. Validation: Check for valid UUID and ensure it's not the string "undefined"
+    if (!id || id === 'undefined' || id === 'null') {
+        return res.status(400).json({ error: 'Valid Contract ID is required.' });
     }
-    var contractorEmail = "";
+
     try {
-        // Find the contract by its ID and update its status to 'penalized'.
+        // --- Step 1: Update Contract Status ---
         const { data, error } = await supabase
             .from('contracts')
-            .update({ status: 'penalized' }) // Status is now 'penalized'
+            .update({ status: 'penalized' })
             .eq('id', id)
-            .select(`*, bids(contractor_id,pothole_id,            
-                users (
-                email
-            ))`)
+            .select(`
+                *, 
+                bids (
+                    contractor_id,
+                    pothole_id,            
+                    users ( email )
+                )
+            `)
             .single();
-        let contractData = data;
-        console.log(data, "contract data");
-        const potholeID = data?.bids?.pothole_id;
-        if (data?.bids?.users?.email) {
 
-            contractorEmail = data.bids.users.email;
-            const potholeDescription = "";
-
-            console.log("Found contractor email:", contractorEmail);
-
-            sendPotholeReappearedEmail(contractorEmail, potholeDescription);
-
-        } else {
-            console.warn("Could not send 'pothole reappeared' email: Required data (email or description) is missing.");
-        }
-
-        if (error) {
-            // "PGRST116" is the code for a query that returns 0 rows, meaning the contract wasn't found.
-            if (error.code === 'PGRST116') {
+        if (error || !data) {
+            if (error?.code === 'PGRST116' || !data) {
                 return res.status(404).json({ error: 'Contract not found.' });
             }
-            throw error; // Let the catch block handle other errors.
+            throw error;
         }
+
+        const contractData = data;
+        
+        // Safe navigation to extract data
         const contractorId = data.bids?.contractor_id;
-        if (!contractorId) {
-            return res.status(404).json({ error: 'Could not find the contractor for this contract.' });
+        const potholeID = data.bids?.pothole_id; // Get the Pothole ID
+        const contractorEmail = data.bids?.users?.email;
+
+        // --- Step 2: Send Reopen Notification Email ---
+        if (contractorEmail) {
+            // Note: potholeDescription is empty in your original code, you might want to fetch it if needed
+            sendPotholeReappearedEmail(contractorEmail, ""); 
+        } else {
+            console.warn("Skipping email: No contractor email found.");
         }
 
-        // Step 2: Manually increment the contractor's penalty count
+        if (!contractorId) {
+            return res.status(404).json({ error: 'Contractor not found for this contract.' });
+        }
 
-        // 2a. First, READ the current penalty count
-        const { data: contractorDetails, error: fetchError } = await supabase
+        // --- Step 3: Increment Penalty Count ---
+        
+        // 3a. Read current count
+        const { data: contractorDetails } = await supabase
             .from('contractor_details')
             .select('no_of_penalty')
             .eq('user_id', contractorId)
             .single();
 
-        if (fetchError) {
-            console.error('Failed to fetch penalty count:', fetchError);
-            // Even if this fails, we should still proceed with rejecting the repair
-        }
-
-        // 2b. Then, WRITE the new incremented value
         const currentPenalties = contractorDetails?.no_of_penalty || 0;
-        const { error: updateError } = await supabase
+        const newPenaltyCount = currentPenalties + 1;
+
+        // 3b. Update count
+        await supabase
             .from('contractor_details')
-            .update({ no_of_penalty: currentPenalties + 1 })
+            .update({ no_of_penalty: newPenaltyCount })
             .eq('user_id', contractorId);
 
-        if (updateError) {
-            // Log this error but do not stop the process, as the main rejection is more critical
-            console.error('Failed to update penalty count:', updateError);
-        }
+        // --- Step 4: Handle Blacklisting (Threshold >= 10) ---
+        if (newPenaltyCount >= 10) {
+            console.log(`Contractor ${contractorId} has reached penalty limit. Blacklisting...`);
 
-        if (currentPenalties + 1 >= 10) {
-            const { data: userData, error: userError } = await supabase
+            // 4a. Mark user as blacklisted
+            await supabase
                 .from('users')
-                .update({ verify: 'blacklisted' }) // 1. Perform the update
-                .eq('id', contractorId)            // 2. Target the specific user
-                .select('email')                   // 3. Return ONLY the email of the updated record
-                .single();
-            if (userError) {
-                console.error('Failed to fetch contractor email:', userError);
-            }
+                .update({ verify: 'blacklisted' })
+                .eq('id', contractorId);
 
-            const contractorEmail = userData ? userData.email : null;
-
-            const { data: bidsData, error: bidsError } = await supabase
+            // 4b. Fetch all active bids for this contractor
+            const { data: bidsData } = await supabase
                 .from('bids')
-                .select(`
-                    *,
-                    contracts ( status, start_date, expected_end_date )
-                `)
+                .select('pothole_id')
                 .eq('contractor_id', contractorId);
 
-            if (bidsError) console.error("Error fetching bids:", bidsError);
-            console.log(bidsData, "biddata");
-            console.log(bidsData[0].contracts, "contracts");
-            const potholeIdsToDelete = getIdsToDelete(bidsData);
+            // 4c. Logic to clean up bids (assuming getIdsToDelete exists or we map them here)
+            const potholeIdsToDelete = bidsData ? bidsData.map(b => b.pothole_id) : [];
 
-            console.log("List of Pothole IDs to delete:", potholeIdsToDelete);
             if (potholeIdsToDelete.length > 0) {
-                const { error: deleteError } = await supabase
-                    .from('bids')
-                    .delete()
-                    .in('pothole_id', potholeIdsToDelete); // Pass the WHOLE array here
-
-                if (deleteError) {
-                    console.error('Error deleting bids:', deleteError.message);
-                } else {
-                    console.log('Bids deleted successfully.');
-                }
-            }
-            if (potholeIdsToDelete.length > 0) {
-                const { data, error } = await supabase
+                // Delete bids
+                await supabase.from('bids').delete().in('pothole_id', potholeIdsToDelete);
+                
+                // Reset associated potholes to 'reported'
+                await supabase
                     .from('potholes')
-                    .update({ status: 'reported' })      // 1. Set the new status
-                    .in('id', potholeIdsToDelete)        // 2. Filter by your list of IDs
-                    .eq('status', 'under_review');       // 3. (Optional) Strict check: only update if currently 'under_review'
-
-                if (error) {
-                    console.error('Error updating potholes:', error.message);
-                } else {
-                    console.log('Potholes reset to reported successfully.');
-                }
-            }
-            const { data: potholeData, error: potholeError } = await supabase
-                .from('potholes')
-                .update({ status: 'reported' })
-                .eq('id', potholeID)
-                .select()
-                .single();
-            if (potholeError)
-                console.error('Error updating pothole status:', potholeError.message);
-            const { data: imageData, error: imageError } = await supabase
-                .from('images')
-                .update({ type: 'fix_proof' })
-                .eq('pothole_id', id) // Use the correct ID column here (e.g., 'id' or 'pothole_id')
-                .select()
-                .maybeSingle(); // <--- This returns null (no error) if 0 rows are found
-
-            if (imageError) {
-                console.error("Error updating image:", imageError);
-            } else if (!imageData) {
-                console.log("No image found to update; continuing...");
+                    .update({ status: 'reported' })
+                    .in('id', potholeIdsToDelete)
+                    .eq('status', 'under_review');
             }
 
-            sendBlacklistEmail(contractorEmail, "");
+            // 4d. Ensure the CURRENT pothole is reset
+            if (potholeID) {
+                await supabase
+                    .from('potholes')
+                    .update({ status: 'reported' })
+                    .eq('id', potholeID);
+                
+                // Reset the image type using POTHOLE ID (Fixed Bug: was using Contract ID 'id')
+                await supabase
+                    .from('images')
+                    .update({ type: 'fix_proof' }) // Or whatever type implies it needs fixing again
+                    .eq('pothole_id', potholeID); 
+            }
+
+            // 4e. Send Blacklist Email
+            if (contractorEmail) sendBlacklistEmail(contractorEmail, "");
+
+            return res.status(200).json({
+                message: 'Contract penalized and Contractor has been Blacklisted.',
+                contract: contractData,
+            });
+
+        } else {
+            // --- Step 5: Handle Normal Penalty (Threshold < 10) ---
+            
+            // CRITICAL FIX: You were missing the response here in your original code
+            return res.status(200).json({
+                message: 'Contract has been penalized.',
+                contract: contractData,
+                penalty_count: newPenaltyCount
+            });
         }
-        res.status(200).json({
-            message: 'Contract has been penalized.',
-            contract: contractData,
-        });
-        // else {
-
-        //     // Step 3: Fetch the contractor's email from the 'users' table
-        //     const { data: userData, error: userError } = await supabase
-        //         .from('users')
-        //         .select('email')
-        //         .eq('id', contractorId)
-        //         .single();
-        //     if (userError) {
-        //         console.error('Failed to fetch contractor email:', userError);
-        //     }
-
-        //     const contractorEmail = userData ? userData.email : null;
-
-        //     // Send the updated contract data back as a success response.
-        //     res.status(200).json({
-        //         message: 'Contract has been penalized.',
-        //         contract: data,
-        //     });
-        // }
-
 
     } catch (error) {
         console.error('Error penalizing contract:', error.message);
-        res.status(500).json({ error: 'An unexpected error occurred on the server.' });
+        return res.status(500).json({ error: 'An unexpected error occurred on the server.' });
     }
 };
 

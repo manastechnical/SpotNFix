@@ -11,59 +11,63 @@ export const submitBid = async (req, res) => {
             required: ['pothole_id', 'contractor_id', 'amount', 'description']
         });
     }
+
+    // 1. Check if user is blacklisted
     try {
         const { data, error } = await supabase
             .from("users")
             .select("*")
             .eq("id", contractor_id)
             .single();
-        if (error) {
-            throw error
-        }
+
+        if (error) throw error;
+        
         if (data.verify === "blacklisted") {
             console.error('Error handling bid: User is blacklisted');
-            return res.status(500).json({
-                error: 'User is blacklisted'
-            });
+            return res.status(500).json({ error: 'User is blacklisted' });
         }
 
     } catch (error) {
         console.error("Check failed:", error.message);
-        // Important: Return a response here, otherwise the request hangs
         return res.status(500).json({ error: "Server validation failed" });
     }
 
     try {
-        // First check if bid exists for this pothole
+        // 2. Check if THIS contractor already has a bid for THIS pothole
         const { data: existingBid, error: fetchError } = await supabase
             .from('bids')
             .select('*')
             .eq('pothole_id', pothole_id)
+            .eq('contractor_id', contractor_id) // <--- CRITICAL: Filter by contractor too
             .single();
 
-        if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "not found" error
+        if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "not found"
             throw fetchError;
         }
 
         let result;
 
         if (existingBid) {
-            // Update existing bid
+            // --- SCENARIO A: UPDATE EXISTING BID ---
+            console.log(`Updating bid for bidID: ${existingBid.id}`);
+            
             const { data, error } = await supabase
                 .from('bids')
                 .update({
-                    contractor_id,
                     amount: parseFloat(amount),
-                    description,
+                    description: description,
+                    bid_at: new Date() // Update timestamp
                 })
-                .eq('pothole_id', pothole_id)
+                .eq('id', existingBid.id)
                 .select()
                 .single();
 
             if (error) throw error;
             result = { data, message: 'Bid updated successfully' };
         } else {
-            // Insert new bid
+            // --- SCENARIO B: CREATE NEW BID ---
+            console.log(`Creating new bid for potholeID: ${pothole_id}`);
+            
             const { data, error } = await supabase
                 .from('bids')
                 .insert([{
@@ -101,12 +105,7 @@ export const acceptBid = async (req, res) => {
     }
 
     try {
-        // NOTE: For production, these three operations should be combined into a single 
-        // database transaction using a Supabase RPC function to ensure data integrity.
-        // Here, we execute them sequentially.
-
         // --- Step 1: Update the Pothole ---
-        // Change the pothole's status to 'under_review'.
         const { data, error: potholeUpdateError } = await supabase
             .from('potholes')
             .update({ status: 'under_review' })
@@ -115,55 +114,61 @@ export const acceptBid = async (req, res) => {
                 *,
                 bids (
                     *,
-                    users (
-                        name,
-                        email
-                    )
+                    users ( name, email )
                 )
-            `)
+            `);
 
-        if (potholeUpdateError) {
-            throw potholeUpdateError;
-        }
+        if (potholeUpdateError) throw potholeUpdateError;
 
-        if (data[0]?.bids[0]?.users?.email) {
-            // Log the email for debugging
-            console.log("email", data[0].bids[0].users.email);
-            sendContractAssignEmail(data[0].bids[0].users.email, data[0].description);
+        // Send Email to the winner
+        // We find the specific bid that was passed in the body, not just the first one
+        const selectedBid = data[0]?.bids?.find(b => b.id === bidId);
+        
+        if (selectedBid?.users?.email) {
+            console.log("Sending email to:", selectedBid.users.email);
+            sendContractAssignEmail(selectedBid.users.email, data[0].description);
         } else {
-            console.warn("Could not send email: User email not found in the data.");
+            console.warn("Could not send email: User email not found.");
         }
-        // --- Step 2: Update the Bid ---
-        // Change the status of the accepted bid to 'accepted'.
+
+        // --- Step 2: Update the Winning Bid to 'accepted' ---
         const { error: bidUpdateError } = await supabase
             .from('bids')
             .update({ status: 'accepted' })
             .eq('id', bidId);
 
-        if (bidUpdateError) {
-            throw bidUpdateError;
+        if (bidUpdateError) throw bidUpdateError;
+
+        // --- Step 3: Reject all OTHER bids for this pothole ---
+        // This ensures other contractors know they didn't win
+        const { error: rejectOthersError } = await supabase
+            .from('bids')
+            .update({ status: 'rejected' })
+            .eq('pothole_id', potholeId)
+            .neq('id', bidId); // Don't reject the one we just accepted
+
+        if (rejectOthersError) {
+            console.error("Warning: Failed to reject other bids", rejectOthersError);
+            // We don't throw here to avoid rolling back the successful acceptance, 
+            // but it's good to log it.
         }
 
-        // --- Step 3: Create the Contract ---
-        // Insert a new row into the 'contracts' table.
+        // --- Step 4: Create the Contract ---
         const { error: contractInsertError } = await supabase
             .from('contracts')
             .insert({
                 bid_id: bidId,
                 approved_by: approverId,
-                status: 'ongoing' // Set the new contract's status
+                status: 'ongoing'
             });
 
-        if (contractInsertError) {
-            throw contractInsertError;
-        }
+        if (contractInsertError) throw contractInsertError;
 
-        // 4. Send a success response
+        // 5. Send a success response
         res.status(200).json({ message: 'Bid accepted and contract created successfully.' });
 
     } catch (error) {
-        // 5. Handle any errors that occur during the process
-        console.error('Error accepting bid and creating contract:', error);
+        console.error('Error accepting bid:', error);
         res.status(500).json({ error: 'Internal server error while processing the bid.' });
     }
 };
