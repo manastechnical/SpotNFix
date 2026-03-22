@@ -31,7 +31,7 @@ const getStatusInfo = (pothole) => {
             return { text: 'Discarded', className: 'bg-red-100 text-red-700' };
         case 'under_review': {
             const contract = getActiveContract(pothole);
-            
+
             if (contract && contract.status === 'completed') {
                 return { text: 'Final Review', className: 'bg-purple-100 text-purple-700' };
             }
@@ -59,6 +59,35 @@ const legendItems = [
     { text: 'Unverified / Unknown', color: '#6B7280' }, // Grey
 ];
 
+// Add this right below the legendItems array
+const ExpandableDescription = ({ description }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const text = description || "No description provided.";
+
+    // Check if the text is long enough to need a toggle button.
+    const isLongText = text.length > 150;
+
+    return (
+        <div className="bg-gray-100 p-2 rounded text-sm text-gray-700 flex flex-col items-start">
+            <div className={`break-words whitespace-pre-wrap ${!isExpanded && isLongText ? 'line-clamp-3' : ''}`}>
+                {text}
+            </div>
+
+            {isLongText && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation(); // Prevents clicks from triggering parent elements
+                        setIsExpanded(!isExpanded);
+                    }}
+                    className="text-blue-600 hover:text-blue-800 text-xs font-bold mt-1 transition-colors"
+                >
+                    {isExpanded ? "Show Less" : "Read More"}
+                </button>
+            )}
+        </div>
+    );
+};
+
 
 const ApprovePothole = () => {
     const mapContainerRef = useRef(null);
@@ -73,9 +102,37 @@ const ApprovePothole = () => {
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [isUpdating, setIsUpdating] = useState(false);
     const [isLegendVisible, setIsLegendVisible] = useState(false);
-    
+    const [sortedBids, setSortedBids] = useState([]);   //new
+    const [isAiSorting, setIsAiSorting] = useState(false);
+
     // State for Bid Modal
     const [showBidModal, setShowBidModal] = useState(false);
+
+    const handleViewBids = async (pothole) => {
+        setSelectedPothole(pothole);
+        setShowBidModal(true);
+        setIsAiSorting(true);
+
+        try {
+            // Send the bids to your new backend route
+            const response = await apiConnector("post", bidEndpoints.SORT_BIDS, {
+                bids: pothole.bids
+            });
+
+            if (response.data.success) {
+                setSortedBids(response.data.sortedBids);
+            } else {
+                // Fallback to basic price sorting if AI fails
+                setSortedBids([...pothole.bids].sort((a, b) => a.amount - b.amount));
+            }
+        } catch (error) {
+            console.error("Failed to sort bids with AI:", error);
+            toast.error("AI sorting failed. Defaulting to price sort.");
+            setSortedBids([...pothole.bids].sort((a, b) => a.amount - b.amount));
+        } finally {
+            setIsAiSorting(false);
+        }
+    };
 
     // Fetch all potholes from the API
     const fetchPotholes = async () => {
@@ -96,7 +153,7 @@ const ApprovePothole = () => {
     // Effect for fetching address when a pothole is selected
     useEffect(() => {
         setCurrentImageIndex(0);
-        setShowBidModal(false); 
+        setShowBidModal(false);
         const fetchAddress = async () => {
             if (!selectedPothole) {
                 setPotholeAddress("");
@@ -128,7 +185,7 @@ const ApprovePothole = () => {
             center: [72.8777, 19.0760], // Default center to Mumbai
             zoom: 10
         });
-        
+
         map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
         map.addControl(new mapboxgl.GeolocateControl({
             positionOptions: { enableHighAccuracy: true },
@@ -182,13 +239,13 @@ const ApprovePothole = () => {
         try {
             const response = await apiConnector("patch", `${potholeEndpoints.VERIFY_POTHOLE}/${potholeId}`, {});
             const detectedSeverity = response.data?.detectedSeverity;
-            
+
             if (detectedSeverity) {
                 toast.success(`Pothole Verified! Severity: ${detectedSeverity}`, { id: toastId });
             } else {
                 toast.success("Pothole Verified!", { id: toastId });
             }
-            
+
             setSelectedPothole(null);
             await fetchPotholes();
         } catch (error) {
@@ -225,7 +282,7 @@ const ApprovePothole = () => {
             await apiConnector("patch", `${bidEndpoints.ACCEPT_BID}/${potholeId}`, { bidId, approverId: user.id });
 
             toast.success("Bid accepted successfully!", { id: toastId });
-            setShowBidModal(false); 
+            setShowBidModal(false);
             setSelectedPothole(null);
             await fetchPotholes();
         } catch (error) {
@@ -253,7 +310,7 @@ const ApprovePothole = () => {
         }
     };
 
-    const handleRejectRepair = async (contractId,potholeId) => {
+    const handleRejectRepair = async (contractId, potholeId) => {
         setIsUpdating(true);
         const toastId = toast.loading("Rejecting Repair...");
         try {
@@ -371,9 +428,9 @@ const ApprovePothole = () => {
                     {/* Image Carousel */}
                     <div className="relative w-full h-48 bg-gray-200 rounded-lg">
                         <img src={
-                            selectedPothole.images?.length 
+                            selectedPothole.images?.length
                                 ? (selectedPothole.images[currentImageIndex].type === 'fix_proof' && selectedPothole.images[currentImageIndex].completed_img_url
-                                    ? selectedPothole.images[currentImageIndex].completed_img_url 
+                                    ? selectedPothole.images[currentImageIndex].completed_img_url
                                     : selectedPothole.images[currentImageIndex].image_url)
                                 : placeholderImageUrl
                         } alt="Pothole" className="w-full h-full rounded-lg object-cover" />
@@ -394,11 +451,11 @@ const ApprovePothole = () => {
                                     <span className={`px-3 py-1 text-xs font-bold rounded-full ${selectedPothole.severity === "High" ? "bg-red-100 text-red-700" : selectedPothole.severity === "Medium" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
                                         {selectedPothole.severity} Severity
                                     </span>
-                                    
+
                                     {/* Info Button for Bids */}
                                     {selectedPothole.bids && selectedPothole.bids.length > 0 && selectedPothole.status === 'reported' && selectedPothole.verify && (
-                                        <button 
-                                            onClick={() => setShowBidModal(true)}
+                                        <button
+                                            onClick={() => handleViewBids(selectedPothole)}
                                             className="bg-blue-100 p-1 rounded-full text-blue-600 hover:bg-blue-200 transition-colors"
                                             title="View and select from all bids"
                                         >
@@ -466,16 +523,16 @@ const ApprovePothole = () => {
                     */}
                     {getStatusInfo(selectedPothole).text === 'Final Review' && activeContract && (
                         <div className="border-t pt-3 flex justify-between space-x-3">
-                            <Button 
-                                className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white" 
-                                onClick={() => handleRejectRepair(activeContract.id, selectedPothole.id)} 
+                            <Button
+                                className="w-full md:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white"
+                                onClick={() => handleRejectRepair(activeContract.id, selectedPothole.id)}
                                 disabled={isUpdating}
                             >
                                 Reject Work
                             </Button>
-                            <Button 
-                                className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white" 
-                                onClick={() => handleFinalizeRepair(selectedPothole.id)} 
+                            <Button
+                                className="w-full md:w-auto flex-1 bg-green-500 hover:bg-green-600 text-white"
+                                onClick={() => handleFinalizeRepair(selectedPothole.id)}
                                 disabled={isUpdating}
                             >
                                 Accept & Finalize
@@ -489,7 +546,7 @@ const ApprovePothole = () => {
             {showBidModal && selectedPothole && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowBidModal(false)}>
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                        
+
                         {/* Modal Header */}
                         <div className="flex justify-between items-center p-4 border-b shrink-0">
                             <h2 className="text-xl font-bold">All Bids</h2>
@@ -497,20 +554,32 @@ const ApprovePothole = () => {
                         </div>
 
                         {/* Modal Body with Vertical Scroll */}
+                        {/* Modal Body with Vertical Scroll */}
                         <div className="p-4 overflow-y-auto">
-                            {selectedPothole.bids && selectedPothole.bids.length > 0 ? (
+                            {isAiSorting ? (
+                                <div className="flex flex-col items-center justify-center py-8 space-y-3">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                    <p className="text-gray-600 text-sm font-medium">✨ AI is analyzing and ranking bids...</p>
+                                </div>
+                            ) : sortedBids && sortedBids.length > 0 ? (
                                 <div className="space-y-4">
-                                    {[...selectedPothole.bids]
-                                        .sort((a, b) => a.amount - b.amount) 
-                                        .map((bid) => (
-                                        <div key={bid.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
-                                            <div className="flex justify-between items-start mb-2">
+                                    {sortedBids.map((bid, index) => (
+                                        <div key={bid.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors relative">
+
+                                            {/* Add a badge for the top AI pick */}
+                                            {index === 0 && (
+                                                <span className="absolute -top-3 left-3 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm">
+                                                    ✨ AI Top Pick
+                                                </span>
+                                            )}
+
+                                            <div className="flex justify-between items-start mb-2 mt-1">
                                                 <div>
                                                     <p className="font-bold text-lg">₹{bid.amount}</p>
                                                     <p className="text-sm font-semibold text-gray-700">{bid.users?.name}</p>
                                                     <p className="text-xs text-gray-500">{bid.users?.email}</p>
                                                 </div>
-                                                <Button 
+                                                <Button
                                                     size="sm"
                                                     className="bg-green-600 hover:bg-green-700 text-white"
                                                     onClick={() => handleAcceptBid(selectedPothole.id, bid.id)}
@@ -519,10 +588,8 @@ const ApprovePothole = () => {
                                                     {isUpdating ? '...' : 'Accept'}
                                                 </Button>
                                             </div>
-                                            
-                                            <div className="bg-gray-100 p-2 rounded text-sm text-gray-700 break-words whitespace-pre-wrap">
-                                                {bid.description || "No description provided."}
-                                            </div>
+
+                                            <ExpandableDescription description={bid.description} />
                                         </div>
                                     ))}
                                 </div>

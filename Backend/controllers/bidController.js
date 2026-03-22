@@ -1,5 +1,6 @@
 import supabase from '../supabaseClient.js';
 import { sendContractAssignEmail } from '../utils/sendContractAssignEmail.js';
+import { GoogleGenAI } from '@google/genai';
 
 export const submitBid = async (req, res) => {
     const { pothole_id, contractor_id, amount, description } = req.body;
@@ -170,5 +171,56 @@ export const acceptBid = async (req, res) => {
     } catch (error) {
         console.error('Error accepting bid:', error);
         res.status(500).json({ error: 'Internal server error while processing the bid.' });
+    }
+};
+
+
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+export const sortBidsWithAI = async (req, res) => {
+    try {
+        const { bids } = req.body;
+
+        if (!bids || !Array.isArray(bids) || bids.length === 0) {
+            return res.status(400).json({ error: "Invalid or empty bids array provided." });
+        }
+
+        // Create a prompt that explains exactly how to evaluate the bids
+        const prompt = `
+            You are an expert system evaluating contractor bids for pothole repairs. 
+            I will provide you with a JSON array of bids. Each bid has an 'id', 'amount', and 'description'.
+            
+            Your job is to sort these bids from BEST to WORST based on a combination of price and description quality:
+            1. Description Quality: Look for detailed, professional, and technically sound repair methodologies (e.g., cutting edges, applying tack coats, hot mix asphalt, proper compaction). 
+            2. Flag Garbage Data: Any description containing placeholder text like "Lorem Ipsum", nonsensical strings, or dangerously brief details should be ranked lower, regardless of how cheap the price is.
+            3. Price vs Value: A slightly higher price is acceptable if the description proves the contractor knows what they are doing. 
+            
+            Return ONLY a JSON array of the bid objects in the exact format they were provided, but sorted from best (index 0) to worst. Do not include markdown formatting or explanations.
+            
+            Here are the bids to evaluate:
+            ${JSON.stringify(bids)}
+        `;
+
+        // Call Gemini (using 2.5-flash for fast, structured logic)
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+            }
+        });
+
+        // Parse the JSON string returned by Gemini
+        const sortedBids = JSON.parse(response.text);
+
+        return res.status(200).json({
+            success: true,
+            sortedBids: sortedBids
+        });
+
+    } catch (error) {
+        console.error("AI Sorting Error:", error);
+        return res.status(500).json({ error: "Failed to sort bids using AI." });
     }
 };

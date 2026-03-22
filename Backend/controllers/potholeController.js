@@ -223,7 +223,6 @@ export const getAllPotholes = async (req, res) => {
                 ? pothole.bids[0] 
                 : null
         }));
-
         res.status(200).json(transformedData);
     } catch (error) {
         console.error("Error fetching all potholes:", error);
@@ -869,7 +868,7 @@ export const penalizeReopen = async (req, res) => {
                 // Reset the image type using POTHOLE ID (Fixed Bug: was using Contract ID 'id')
                 await supabase
                     .from('images')
-                    .update({ type: 'fix_proof' }) // Or whatever type implies it needs fixing again
+                    .update({ type: 'before_proof' }) // Or whatever type implies it needs fixing again
                     .eq('pothole_id', potholeID); 
             }
 

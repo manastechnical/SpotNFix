@@ -21,6 +21,7 @@ export const uploadEndPoints = {
 export const bidEndpoints = {
   SUBMIT_BID: BaseURL + 'api/bids/submit',
   ACCEPT_BID: BaseURL + 'api/bids/accept',
+  SORT_BIDS: BaseURL + 'api/bids/sort',
 };
 
 export const adminEndpoints = {
